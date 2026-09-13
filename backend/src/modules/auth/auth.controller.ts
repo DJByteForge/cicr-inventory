@@ -415,7 +415,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
 export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
   try {
-    await syncApprovalsFromDatabase();
+    const force = req.query.force === 'true';
+    await syncApprovalsFromDatabase(force);
 
     const { data: users, error } = await dbRead
       .from('users')

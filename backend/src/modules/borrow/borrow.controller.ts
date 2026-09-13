@@ -12,10 +12,15 @@ import {
 } from '../../services/emailService';
 import { ADMIN_DIRECTORY, getAdminById } from './adminDirectory';
 import { generateOtp, storeOtp, verifyOtp as verifyOtpCode, consumeOtp } from './otpService';
-import { cacheGetJSON, cacheSetJSON } from '../../config/redis';
+import { cacheGetJSON, cacheSetJSON, cacheInvalidatePattern } from '../../config/redis';
 import { invalidateItemsCache } from '../inventory/inventory.controller';
 
 const ADMIN_DIRECTORY_CACHE_TTL = 60; // seconds
+const BORROW_HISTORY_CACHE_TTL = 15; // 15 seconds cache to eliminate DB connection saturation
+
+export const invalidateBorrowHistoryCache = async (): Promise<void> => {
+  await cacheInvalidatePattern('cicr:cache:borrow:history:*');
+};
 
 export const MIN_RENTAL_DAYS = 1;
 export const MAX_RENTAL_DAYS = 30;
@@ -324,6 +329,8 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
       returnedAt: returnTimestamp
     }));
 
+    invalidateBorrowHistoryCache().catch(() => {});
+
     return res.status(200).json({
       status: 'success',
       message: 'Item returned successfully! Return logged on server.',
@@ -334,11 +341,20 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// GET /api/borrow/history (Borrow History)
+// GET /api/borrow/history (Borrow History with caching)
 export const getBorrowHistory = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const userRole = req.user?.role;
+    const force = req.query.force === 'true';
+
+    const cacheKey = `cicr:cache:borrow:history:${userRole === 'ADMIN' ? 'all' : (userId || 'anon')}`;
+    if (!force) {
+      const cached = await cacheGetJSON<{ status: string; count: number; data: any[] }>(cacheKey);
+      if (cached) {
+        return res.status(200).json(cached);
+      }
+    }
 
     let query = dbRead
       .from('borrow_records')
@@ -375,7 +391,10 @@ export const getBorrowHistory = async (req: AuthRequest, res: Response) => {
       inventory: itemMap[r.inventory_id] || null
     }));
 
-    return res.status(200).json({ status: 'success', count: history.length, data: history });
+    const payload = { status: 'success', count: history.length, data: history };
+    await cacheSetJSON(cacheKey, payload, BORROW_HISTORY_CACHE_TTL);
+
+    return res.status(200).json(payload);
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
@@ -444,8 +463,9 @@ export const createHardwareRequestHandler = async (req: AuthRequest, res: Respon
 
 export const getHardwareRequestsHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const force = req.query.force === 'true';
     const { getAllHardwareRequests } = await import('./hardwareRequestService');
-    const requests = await getAllHardwareRequests();
+    const requests = await getAllHardwareRequests(force);
     return res.status(200).json({
       status: 'success',
       count: requests.length,
@@ -463,11 +483,13 @@ export const approveHardwareRequestHandler = async (req: AuthRequest, res: Respo
     const adminEmail = req.user?.email || 'cicrinventory@gmail.com';
 
     const { approveHardwareRequest } = await import('./hardwareRequestService');
-    const result = await approveHardwareRequest(id, adminName, adminEmail);
+    const result = await approveHardwareRequest(id, adminName, adminEmail, req.body);
 
     if (!result.success) {
       return res.status(400).json({ status: 'error', message: result.error });
     }
+
+    invalidateBorrowHistoryCache().catch(() => {});
 
     logAudit(
       'Hardware Approved',
@@ -499,6 +521,8 @@ export const rejectHardwareRequestHandler = async (req: AuthRequest, res: Respon
     if (!result.success) {
       return res.status(400).json({ status: 'error', message: result.error });
     }
+
+    invalidateBorrowHistoryCache().catch(() => {});
 
     logAudit(
       'Hardware Rejected',

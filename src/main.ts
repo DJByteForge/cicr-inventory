@@ -8,14 +8,22 @@ declare const lucide: {
 };
 
 // Dynamic API URL for Local Development & Live Production
+const isLocalHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.startsWith('192.168.') ||
+    window.location.hostname.startsWith('10.') ||
+    window.location.hostname.endsWith('.local')
+);
+
 let API_BASE = (import.meta.env.VITE_API_BASE as string) ||
-    (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:5000/api'
+    (isLocalHost
+        ? `http://${(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'localhost' : window.location.hostname}:5000/api`
         : 'https://cicr-inventory-backend.onrender.com/api');
 
 const CLOUD_API_FALLBACK = 'https://cicr-inventory-backend.onrender.com/api';
 
-// Intelligent Automatic Failover: If local backend is down, seamlessly switch to live cloud backend
+// Intelligent Automatic Failover: If local backend request fails, fall back for that request without permanently poisoning API_BASE
 if (typeof window !== 'undefined' && window.fetch) {
     const originalFetch = window.fetch.bind(window);
     window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -23,10 +31,9 @@ if (typeof window !== 'undefined' && window.fetch) {
             return await originalFetch(input, init);
         } catch (err: any) {
             const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
-            if (urlStr && (urlStr.includes('localhost:5000') || urlStr.includes('127.0.0.1:5000'))) {
-                const fallbackUrl = urlStr.replace(/https?:\/\/(localhost|127\.0\.0\.1):5000\/api/, CLOUD_API_FALLBACK);
+            if (urlStr && (urlStr.includes(':5000/api'))) {
+                const fallbackUrl = urlStr.replace(/https?:\/\/[^/]+:5000\/api/, CLOUD_API_FALLBACK);
                 console.warn(`[CICR API] Local backend unreachable. Auto-falling back to cloud backend: ${fallbackUrl}`);
-                API_BASE = CLOUD_API_FALLBACK;
                 return originalFetch(fallbackUrl, init);
             }
             throw err;
@@ -428,29 +435,32 @@ class DatabaseManager {
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            // 1. Fetch live items from Supabase with cache-busting
-            const res = await fetch(`${API_BASE}/items?_t=${Date.now()}`, {
-                cache: 'no-store',
-                headers
-            });
-            if (res.ok) {
-                const json = await res.json();
-                const dbItems = json.data || [];
+            // 1. Fetch items, borrow records, and audit concurrently in parallel
+            const [itemsOutcome, borrowOutcome, auditOutcome] = await Promise.allSettled([
+                fetch(`${API_BASE}/items`, { headers }),
+                token ? fetch(`${API_BASE}/borrow/history`, { headers }) : Promise.reject('No token'),
+                token ? fetch(`${API_BASE}/audit`, { headers }) : Promise.reject('No token')
+            ]);
 
-                // 2. Fetch live borrow records from Supabase
-                let liveBorrows: any[] = [];
-                if (token) {
-                    try {
-                        const borrowRes = await fetch(`${API_BASE}/borrow/history`, { headers });
-                        if (borrowRes.ok) {
-                            const bJson = await borrowRes.json();
-                            liveBorrows = bJson.data || [];
-                        }
-                    } catch (be) {
-                        console.warn('Live borrow fetch failed:', be);
-                    }
+            let dbItems: any[] = [];
+            if (itemsOutcome.status === 'fulfilled' && itemsOutcome.value.ok) {
+                try {
+                    const json = await itemsOutcome.value.json();
+                    dbItems = json.data || [];
+                } catch {}
+            }
+
+            let liveBorrows: any[] = [];
+            if (borrowOutcome.status === 'fulfilled' && borrowOutcome.value.ok) {
+                try {
+                    const bJson = await borrowOutcome.value.json();
+                    liveBorrows = bJson.data || [];
+                } catch (be) {
+                    console.warn('Live borrow parse failed:', be);
                 }
+            }
 
+            if (dbItems.length > 0) {
                 // Map Supabase inventory format to frontend InventoryItem format
                 inventory = dbItems.map((item: any) => {
                     let cat = (item.category || '').toLowerCase();
@@ -493,33 +503,30 @@ class DatabaseManager {
 
                 // Save to localStorage cache
                 this.save();
+            }
 
-                // 3. Fetch live audit logs from Supabase
-                if (token) {
-                    try {
-                        const auditRes = await fetch(`${API_BASE}/audit`, { headers });
-                        if (auditRes.ok) {
-                            const aJson = await auditRes.json();
-                            if (Array.isArray(aJson.data)) {
-                                logs = aJson.data.map((l: any) => ({
-                                    type: l.action.toLowerCase().includes('borrow') ? 'borrow'
-                                        : l.action.toLowerCase().includes('return') ? 'return'
-                                        : l.action.toLowerCase().includes('add') ? 'add' : 'system',
-                                    timestamp: l.created_at || new Date().toISOString(),
-                                    text: l.description || l.action
-                                }));
-                                localStorage.setItem('cicr_logs', JSON.stringify(logs));
-                            }
-                        }
-                    } catch (ae) {
-                        console.warn('Live audit fetch failed:', ae);
+            // Process audit logs
+            if (auditOutcome.status === 'fulfilled' && auditOutcome.value.ok) {
+                try {
+                    const aJson = await auditOutcome.value.json();
+                    if (Array.isArray(aJson.data)) {
+                        logs = aJson.data.map((l: any) => ({
+                            type: l.action.toLowerCase().includes('borrow') ? 'borrow'
+                                : l.action.toLowerCase().includes('return') ? 'return'
+                                : l.action.toLowerCase().includes('add') ? 'add' : 'system',
+                            timestamp: l.created_at || new Date().toISOString(),
+                            text: l.description || l.action
+                        }));
+                        localStorage.setItem('cicr_logs', JSON.stringify(logs));
                     }
+                } catch (ae) {
+                    console.warn('Live audit parse failed:', ae);
                 }
+            }
 
-                if (window.dashboard) {
-                    window.dashboard.renderStats();
-                    window.dashboard.renderInventory();
-                }
+            if (window.dashboard && dbItems.length > 0) {
+                window.dashboard.renderStats();
+                window.dashboard.renderInventory();
             }
         } catch (err) {
             console.error('Realtime Supabase sync failed:', err);
@@ -535,6 +542,35 @@ class DatabaseManager {
 
     static updateNotificationBadges() {
         const todayStr = new Date().toISOString().split('T')[0];
+        const role = ModalManager.getCurrentRole();
+        const isAdmin = role === 'ADMIN';
+
+        const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
+        const authName = (localStorage.getItem('cicr_auth') || '').toLowerCase().trim();
+        const userName = (storedUser.name || '').toLowerCase().trim();
+        const userEmail = (storedUser.email || '').toLowerCase().trim();
+        const userRoll = (storedUser.roll_number || storedUser.roll || '').toLowerCase().trim();
+
+        const isUserLoan = (rec: BorrowRecord) => {
+            const rName = (rec.name || '').toLowerCase().trim();
+            const rRoll = (rec.roll || '').toLowerCase().trim();
+            if (userRoll && rRoll && rRoll === userRoll) return true;
+            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
+            if (authName && rName && (rName === authName || authName.includes(rName))) return true;
+            return false;
+        };
+
+        const isUserRequest = (req: RequestRecord) => {
+            const rName = (req.name || '').toLowerCase().trim();
+            const rRoll = (req.roll || '').toLowerCase().trim();
+            const rEmail = ((req as any).email || '').toLowerCase().trim();
+            if (userRoll && rRoll && rRoll === userRoll) return true;
+            if (userEmail && rEmail && rEmail === userEmail) return true;
+            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
+            if (authName && (rName === authName || rEmail === authName)) return true;
+            return false;
+        };
+
         let overdueCount = 0;
         let activeLoansCount = 0;
         let lowStockCount = 0;
@@ -543,10 +579,16 @@ class DatabaseManager {
             const available = typeof item.availableQuantity === 'number'
                 ? item.availableQuantity
                 : item.quantity;
-            if (available <= 2) lowStockCount++;
+            if (isAdmin && available <= 2 && available > 0) {
+                lowStockCount++;
+            }
 
             (item.borrowedBy || []).forEach((rec) => {
                 if (rec.returned) return;
+
+                const belongsToUser = isUserLoan(rec);
+                if (!isAdmin && !belongsToUser) return;
+
                 activeLoansCount++;
 
                 let due = rec.dueDate;
@@ -562,8 +604,15 @@ class DatabaseManager {
             });
         });
 
-        const pendingReqs = requests.filter(r => r.status === 'PENDING').length;
-        const totalAlerts = overdueCount + activeLoansCount + lowStockCount + pendingReqs;
+        const pendingReqs = isAdmin
+            ? requests.filter(r => r.status === 'PENDING').length
+            : requests.filter(r => isUserRequest(r) && r.status === 'PENDING').length;
+
+        // Admin badge counts critical actions: overdues + pending requests + low reserves
+        // Member badge counts user loans, overdue notices & pending requests
+        const totalAlerts = isAdmin
+            ? (overdueCount + pendingReqs + lowStockCount)
+            : (overdueCount + activeLoansCount + pendingReqs);
 
         const sidebarBadge = document.getElementById('sidebar-notif-badge');
         if (sidebarBadge) {
@@ -580,18 +629,22 @@ class DatabaseManager {
         }
     }
 
-    static startAutoSync(intervalMs = 6000) {
+    static startAutoSync(intervalMs = 30000) {
         if ((window as any)._cicrAutoSyncTimer) {
             clearInterval((window as any)._cicrAutoSyncTimer);
         }
         (window as any)._cicrAutoSyncTimer = setInterval(async () => {
+            // Do not consume bandwidth or hammer backend when browser tab is hidden/minimized
+            if (typeof document !== 'undefined' && document.hidden) return;
+
             await this.syncFromBackend();
             const role = ModalManager.getCurrentRole();
             if (role === 'ADMIN') {
-                if (typeof AdminManager !== 'undefined') {
+                const adminSection = document.getElementById('admin-view');
+                const isAdminVisible = adminSection && !adminSection.classList.contains('hidden') && adminSection.style.display !== 'none';
+                if (isAdminVisible && typeof AdminManager !== 'undefined') {
+                    // Only poll lightweight hardware requests if user is actively in Admin portal
                     AdminManager.loadHardwareRequests();
-                    AdminManager.loadUsers();
-                    AdminManager.loadAuditLogs();
                 }
             }
         }, intervalMs);
@@ -852,27 +905,7 @@ class DashboardManager {
             document.body.classList.toggle('view-admin-view', targetId === 'admin-view');
             document.body.classList.toggle('view-inventory-view', targetId === 'inventory-view');
 
-            // Hide the header search box when on dashboard, developers, admin, or inventory view
-            const headerSearchBox = document.querySelector('.header-search') as HTMLElement;
-            const sidebarCommandBtn = document.getElementById('sidebar-command-btn');
 
-            if (headerSearchBox) {
-                if (targetId === 'dashboard-view' || targetId === 'developers-view' || targetId === 'admin-view' || targetId === 'inventory-view') {
-                    headerSearchBox.style.setProperty('display', 'none', 'important');
-                } else {
-                    headerSearchBox.style.removeProperty('display');
-                    headerSearchBox.style.display = 'flex';
-                }
-            }
-
-            if (sidebarCommandBtn) {
-                if (targetId === 'dashboard-view' || targetId === 'developers-view') {
-                    sidebarCommandBtn.style.setProperty('display', 'none', 'important');
-                } else {
-                    sidebarCommandBtn.style.removeProperty('display');
-                    sidebarCommandBtn.style.display = 'flex';
-                }
-            }
 
             // Refresh Lucide icons if needed
             if (typeof lucide !== 'undefined' && lucide.createIcons) {
@@ -1017,22 +1050,7 @@ class DashboardManager {
             });
         }
 
-        // 5. Command palette & Universal search triggers
-        const commandBtn = document.getElementById('sidebar-command-btn');
-        if (commandBtn) {
-            commandBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                CommandPaletteManager.open();
-            });
-        }
 
-        const headerSearchBoxEl = document.getElementById('header-search-box') || document.querySelector('.header-search');
-        if (headerSearchBoxEl) {
-            headerSearchBoxEl.addEventListener('click', (e) => {
-                e.preventDefault();
-                CommandPaletteManager.open();
-            });
-        }
 
         // 6. Profile Logout button
         const logoutBtn = document.getElementById('sidebar-logout-btn');
@@ -1707,7 +1725,7 @@ class ModalManager {
         });
     }
 
-    private static reviewRequest(requestId: string, nextStatus: 'APPROVED' | 'REJECTED') {
+    public static reviewRequest(requestId: string, nextStatus: 'APPROVED' | 'REJECTED') {
         if (!this.isAdmin()) return;
 
         const request = requests.find((entry) => entry.id === requestId);
@@ -1726,6 +1744,7 @@ class ModalManager {
                 DatabaseManager.addLog('reject', `<span>${request.name}</span>'s request for <span>${request.itemName}</span> was rejected because stock ran out.`);
                 DatabaseManager.save();
                 this.renderRequests();
+                this.renderLogsDrawer();
                 if (selectedItem && selectedItem.id === request.itemId) {
                     this.openDetailModal(selectedItem);
                 }
@@ -1754,6 +1773,7 @@ class ModalManager {
         request.reviewedBy = localStorage.getItem('cicr_auth') || 'ADMIN';
         DatabaseManager.save();
         this.renderRequests();
+        this.renderLogsDrawer();
         if (selectedItem && selectedItem.id === request.itemId) {
             this.openDetailModal(selectedItem);
         }
@@ -1892,6 +1912,48 @@ class ModalManager {
 
         this.setBorrowModalMode('request', selectedItem.name, available);
 
+        // Auto-fill logged-in borrower details
+        let currentUserName = '';
+        let currentUserRoll = '';
+        try {
+            const userStr = localStorage.getItem('cicr_user');
+            if (userStr) {
+                const parsed = JSON.parse(userStr);
+                currentUserName = parsed.name || parsed.username || '';
+                currentUserRoll = parsed.roll_number || parsed.roll || '';
+                if (!currentUserRoll && parsed.email) {
+                    const match = String(parsed.email).match(/^([0-9]{6,12})@/);
+                    if (match) currentUserRoll = match[1];
+                }
+            }
+        } catch {}
+
+        if (!currentUserName) {
+            currentUserName = localStorage.getItem('cicr_auth') || '';
+        }
+
+        if (!currentUserName) {
+            const profileDisplay = document.getElementById('profile-username-display');
+            if (profileDisplay && profileDisplay.innerText.trim()) {
+                currentUserName = profileDisplay.innerText.trim();
+            }
+        }
+
+        if (!currentUserRoll && currentUserName) {
+            const match = currentUserName.match(/^([0-9]{6,12})$/);
+            if (match) currentUserRoll = match[1];
+        }
+
+        const nameInput = document.getElementById('borrow-name') as HTMLInputElement | null;
+        if (nameInput && currentUserName) {
+            nameInput.value = currentUserName;
+        }
+
+        const rollInput = document.getElementById('borrow-roll') as HTMLInputElement | null;
+        if (rollInput && currentUserRoll) {
+            rollInput.value = currentUserRoll;
+        }
+
         const qtyInput = document.getElementById('borrow-qty') as HTMLInputElement;
         qtyInput.max = String(available);
         qtyInput.value = '1';
@@ -1908,27 +1970,121 @@ class ModalManager {
         this.open('borrow-form-modal');
     }
 
+    static activeNotifTab: string = 'return';
+
     static openLogsDrawer() {
-        this.renderRequests();
+        this.renderLogsDrawer();
+        this.open('logs-drawer');
+        lucide.createIcons();
+    }
 
-        const logsList = document.getElementById('logs-list')!;
-        logsList.innerHTML = '';
+    static renderLogsDrawer() {
+        const logsList = document.getElementById('logs-list');
+        if (!logsList) return;
 
+        const role = this.getCurrentRole();
+        const isAdmin = role === 'ADMIN';
+
+        const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
+        const authName = (localStorage.getItem('cicr_auth') || '').toLowerCase().trim();
+        const userName = (storedUser.name || '').toLowerCase().trim();
+        const userEmail = (storedUser.email || '').toLowerCase().trim();
+        const userRoll = (storedUser.roll_number || storedUser.roll || '').toLowerCase().trim();
+
+        const isUserLoan = (rec: BorrowRecord) => {
+            const rName = (rec.name || '').toLowerCase().trim();
+            const rRoll = (rec.roll || '').toLowerCase().trim();
+            if (userRoll && rRoll && rRoll === userRoll) return true;
+            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
+            if (authName && rName && (rName === authName || authName.includes(rName))) return true;
+            return false;
+        };
+
+        const isUserRequest = (req: RequestRecord) => {
+            const rName = (req.name || '').toLowerCase().trim();
+            const rRoll = (req.roll || '').toLowerCase().trim();
+            const rEmail = ((req as any).email || '').toLowerCase().trim();
+            if (userRoll && rRoll && rRoll === userRoll) return true;
+            if (userEmail && rEmail && rEmail === userEmail) return true;
+            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
+            if (authName && (rName === authName || rEmail === authName)) return true;
+            return false;
+        };
+
+        // Update Header Badge and Subtitle
+        const roleBadgeEl = document.getElementById('notif-drawer-role-badge');
+        const roleDotEl = document.getElementById('notif-role-dot');
+        const roleTextEl = document.getElementById('notif-role-text');
+        const subtitleEl = document.getElementById('notif-drawer-subtitle');
+
+        if (isAdmin) {
+            if (roleBadgeEl) {
+                roleBadgeEl.classList.remove('role-badge-member');
+                roleBadgeEl.classList.add('role-badge-admin');
+            }
+            if (roleDotEl) {
+                roleDotEl.classList.remove('dot-member');
+                roleDotEl.classList.add('dot-admin');
+            }
+            if (roleTextEl) roleTextEl.innerText = 'ADMIN TELEMETRY';
+            if (subtitleEl) subtitleEl.innerText = 'Operational alerts, loan schedules & system updates';
+        } else {
+            if (roleBadgeEl) {
+                roleBadgeEl.classList.remove('role-badge-admin');
+                roleBadgeEl.classList.add('role-badge-member');
+            }
+            if (roleDotEl) {
+                roleDotEl.classList.remove('dot-admin');
+                roleDotEl.classList.add('dot-member');
+            }
+            if (roleTextEl) roleTextEl.innerText = 'MEMBER ACCESS';
+            if (subtitleEl) subtitleEl.innerText = 'Your active loans, request status & lab updates';
+        }
+
+        // Segmented Category Tabs setup: stock tab is admin-only
+        const stockTabBtn = document.getElementById('notif-tab-stock');
+        if (stockTabBtn) {
+            stockTabBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+        }
+
+        // If regular member is on 'stock' tab or invalid tab, redirect to 'return'
+        if ((!isAdmin && this.activeNotifTab === 'stock') || this.activeNotifTab === 'all') {
+            this.activeNotifTab = 'return';
+        }
+
+        // Setup tab click listeners once
+        const tabsBar = document.getElementById('notif-tabs-bar');
+        if (tabsBar && !tabsBar.dataset.bound) {
+            tabsBar.dataset.bound = 'true';
+            tabsBar.querySelectorAll<HTMLButtonElement>('.notif-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const cat = btn.getAttribute('data-category') || 'return';
+                    ModalManager.activeNotifTab = cat;
+                    ModalManager.renderLogsDrawer();
+                    lucide.createIcons();
+                });
+            });
+        }
+
+        // Highlight active tab button
+        if (tabsBar) {
+            tabsBar.querySelectorAll('.notif-tab-btn').forEach(btn => {
+                const cat = btn.getAttribute('data-category');
+                btn.classList.toggle('active', cat === this.activeNotifTab);
+            });
+        }
+
+        // --- 1. GATHER RETURNS DATA ---
         const todayStr = new Date().toISOString().split('T')[0];
-        const activeOverdueList: { item: InventoryItem; rec: BorrowRecord; due: string }[] = [];
-        const activeLoansList: { item: InventoryItem; rec: BorrowRecord; due: string }[] = [];
-        const lowStockList: InventoryItem[] = [];
+        const overdueLoans: { item: InventoryItem; rec: BorrowRecord; due: string }[] = [];
+        const activeLoans: { item: InventoryItem; rec: BorrowRecord; due: string }[] = [];
 
         inventory.forEach((item) => {
-            const available = typeof item.availableQuantity === 'number'
-                ? item.availableQuantity
-                : item.quantity;
-            if (available <= 2 && available > 0) {
-                lowStockList.push(item);
-            }
-
             (item.borrowedBy || []).forEach((rec) => {
                 if (rec.returned) return;
+
+                const belongsToUser = isUserLoan(rec);
+                if (!isAdmin && !belongsToUser) return;
 
                 let due = rec.dueDate;
                 if (!due && rec.date) {
@@ -1939,134 +2095,314 @@ class ModalManager {
                 }
 
                 if (due && due < todayStr) {
-                    activeOverdueList.push({ item, rec, due });
+                    overdueLoans.push({ item, rec, due: due || 'Overdue' });
                 } else {
-                    activeLoansList.push({ item, rec, due: due || 'Standard (7d)' });
+                    activeLoans.push({ item, rec, due: due || 'Standard (7d)' });
                 }
             });
         });
 
-        // 1. High-Priority Overdue Alerts
-        if (activeOverdueList.length > 0) {
-            const heading = document.createElement('div');
-            heading.className = 'drawer-section-heading';
-            heading.innerHTML = `<span><i data-lucide="alert-triangle" style="width:13px;height:13px;color:#ef4444;vertical-align:middle;"></i> Overdue Returns (${activeOverdueList.length})</span>`;
-            logsList.appendChild(heading);
+        // --- 2. GATHER STOCK DATA (Admin only) ---
+        const lowStockList: InventoryItem[] = [];
+        if (isAdmin) {
+            inventory.forEach((item) => {
+                const available = typeof item.availableQuantity === 'number'
+                    ? item.availableQuantity
+                    : item.quantity;
+                if (available <= 2 && available >= 0) {
+                    lowStockList.push(item);
+                }
+            });
+        }
 
-            activeOverdueList.forEach(({ item, rec, due }) => {
-                const logEl = document.createElement('div');
-                logEl.className = 'log-item log-action-overdue';
-                const dt = DashboardManager.formatLogDateTime(due);
-                logEl.innerHTML = `
-                    <div class="log-meta">
-                        <span class="log-type-tag"><i data-lucide="clock-alert"></i> OVERDUE</span>
-                        <div class="log-timestamp-stack">
-                            <span class="log-date-line" style="color:#f87171;">Due: ${dt.dateStr}</span>
-                            ${dt.timeStr ? `<span class="log-time-line" style="color:#ef4444;">${dt.timeStr}</span>` : ''}
+        // --- 3. GATHER REQUESTS DATA ---
+        const visibleRequests: RequestRecord[] = isAdmin
+            ? [...requests]
+            : requests.filter(r => isUserRequest(r));
+
+        // --- 4. GATHER SYSTEM LOGS DATA ---
+        const visibleLogs: ActivityLog[] = isAdmin
+            ? [...logs]
+            : logs.filter(l => l.type === 'add' || l.type === 'system' || (userName && l.text.toLowerCase().includes(userName)));
+
+        // --- UPDATE BADGE COUNTS ON TABS ---
+        const totalReturnsCount = overdueLoans.length + activeLoans.length;
+        const totalStockCount = lowStockList.length;
+        const totalRequestsCount = visibleRequests.length;
+        const totalSystemCount = visibleLogs.length;
+
+        const countReturn = document.getElementById('notif-count-return');
+        const countStock = document.getElementById('notif-count-stock');
+        const countRequests = document.getElementById('notif-count-requests');
+        const countSystem = document.getElementById('notif-count-system');
+
+        if (countReturn) countReturn.innerText = String(totalReturnsCount);
+        if (countStock) countStock.innerText = String(totalStockCount);
+        if (countRequests) countRequests.innerText = String(totalRequestsCount);
+        if (countSystem) countSystem.innerText = String(totalSystemCount);
+
+        // Synchronize sidebar and topbar badges as well
+        DatabaseManager.updateNotificationBadges();
+
+        // --- RENDER CONTENT BASED ON ACTIVE TAB ---
+        logsList.innerHTML = '';
+        const currentCategory = this.activeNotifTab;
+
+        // Render functions for each category
+        const renderReturnsSection = (container: HTMLElement) => {
+            if (overdueLoans.length === 0 && activeLoans.length === 0) {
+                container.appendChild(ModalManager.createEmptyNotifCard('rotate-ccw', 'No Return Due Schedules', isAdmin ? 'All borrowed components have been returned on schedule.' : 'You have no active loans or overdue components checked out.'));
+                return;
+            }
+
+            // Overdue section
+            if (overdueLoans.length > 0) {
+                const secHeader = document.createElement('div');
+                secHeader.className = 'notif-section-header header-return';
+                secHeader.innerHTML = `
+                    <div class="sec-header-left">
+                        <i data-lucide="alert-triangle"></i>
+                        <span>OVERDUE RETURNS</span>
+                    </div>
+                    <span class="sec-header-badge badge-red">${overdueLoans.length} CRITICAL</span>
+                `;
+                container.appendChild(secHeader);
+
+                overdueLoans.forEach(({ item, rec, due }) => {
+                    const el = document.createElement('div');
+                    el.className = 'notif-card card-return card-overdue';
+                    const dt = DashboardManager.formatLogDateTime(due);
+                    el.innerHTML = `
+                        <div class="notif-card-header">
+                            <div class="notif-card-tag tag-red">
+                                <i data-lucide="clock-alert"></i>
+                                <span>OVERDUE</span>
+                            </div>
+                            <span class="notif-card-due text-red">Due: ${dt.dateStr}</span>
                         </div>
-                    </div>
-                    <div class="log-text-content"><span>${rec.name}</span> (${rec.roll || 'Student'}) has not returned <span>${rec.qty}x ${item.name}</span>. Loan was due on <span>${due}</span>.</div>
-                `;
-                logsList.appendChild(logEl);
-            });
-        }
-
-        // 2. Active Loans & Borrow Schedules
-        if (activeLoansList.length > 0) {
-            const heading = document.createElement('div');
-            heading.className = 'drawer-section-heading';
-            heading.innerHTML = `<span><i data-lucide="shopping-cart" style="width:13px;height:13px;color:#00f0ff;vertical-align:middle;"></i> Active Loans (${activeLoansList.length})</span>`;
-            logsList.appendChild(heading);
-
-            activeLoansList.forEach(({ item, rec, due }) => {
-                const logEl = document.createElement('div');
-                logEl.className = 'log-item log-action-borrow';
-                const dt = DashboardManager.formatLogDateTime(due);
-                logEl.innerHTML = `
-                    <div class="log-meta">
-                        <span class="log-type-tag"><i data-lucide="shopping-cart"></i> ACTIVE LOAN</span>
-                        <div class="log-timestamp-stack">
-                            <span class="log-date-line">Due: ${dt.dateStr}</span>
-                            ${dt.timeStr ? `<span class="log-time-line">${dt.timeStr}</span>` : ''}
+                        <div class="notif-card-body">
+                            <p class="notif-card-main-text">
+                                <strong>${rec.qty}x ${item.name}</strong> was borrowed by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'Student'}).
+                            </p>
+                            <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Lab Project'} &bull; Due date was ${due}. Immediate return required.</p>
                         </div>
+                    `;
+                    container.appendChild(el);
+                });
+            }
+
+            // Active loans section
+            if (activeLoans.length > 0) {
+                const secHeader = document.createElement('div');
+                secHeader.className = 'notif-section-header header-loans';
+                secHeader.innerHTML = `
+                    <div class="sec-header-left">
+                        <i data-lucide="shopping-cart"></i>
+                        <span>ACTIVE LOAN SCHEDULES</span>
                     </div>
-                    <div class="log-text-content"><span>${rec.name}</span> (${rec.roll || 'ID'}) borrowed <span>${rec.qty}x ${item.name}</span> for '${rec.purpose}'.</div>
+                    <span class="sec-header-badge badge-cyan">${activeLoans.length} ACTIVE</span>
                 `;
-                logsList.appendChild(logEl);
-            });
-        }
+                container.appendChild(secHeader);
 
-        // 3. Low Stock Reserve Alerts
-        if (lowStockList.length > 0) {
-            const heading = document.createElement('div');
-            heading.className = 'drawer-section-heading';
-            heading.innerHTML = `<span><i data-lucide="alert-circle" style="width:13px;height:13px;color:#f59e0b;vertical-align:middle;"></i> Low Reserves (${lowStockList.length})</span>`;
-            logsList.appendChild(heading);
+                activeLoans.forEach(({ item, rec, due }) => {
+                    const el = document.createElement('div');
+                    el.className = 'notif-card card-loan';
+                    const dt = DashboardManager.formatLogDateTime(due);
+                    el.innerHTML = `
+                        <div class="notif-card-header">
+                            <div class="notif-card-tag tag-cyan">
+                                <i data-lucide="shopping-cart"></i>
+                                <span>ACTIVE LOAN</span>
+                            </div>
+                            <span class="notif-card-due text-cyan">Due: ${dt.dateStr}</span>
+                        </div>
+                        <div class="notif-card-body">
+                            <p class="notif-card-main-text">
+                                <strong>${rec.qty}x ${item.name}</strong> &bull; Held by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'ID'})
+                            </p>
+                            <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Robotics Work'}</p>
+                        </div>
+                    `;
+                    container.appendChild(el);
+                });
+            }
+        };
 
-            lowStockList.forEach((item) => {
-                const logEl = document.createElement('div');
-                logEl.className = 'log-item log-action-low_stock';
-                logEl.innerHTML = `
-                    <div class="log-meta">
-                        <span class="log-type-tag"><i data-lucide="alert-circle"></i> LOW STOCK</span>
-                        <span>${item.location}</span>
+        const renderStockSection = (container: HTMLElement) => {
+            if (!isAdmin) {
+                container.appendChild(ModalManager.createEmptyNotifCard('shield-alert', 'Restricted Section', 'Warehouse stock reserve telemetry is only accessible to Administrators.'));
+                return;
+            }
+
+            if (lowStockList.length === 0) {
+                container.appendChild(ModalManager.createEmptyNotifCard('boxes', 'Stock Levels Healthy', 'All vaulted components have sufficient reserves above threshold.'));
+                return;
+            }
+
+            const secHeader = document.createElement('div');
+            secHeader.className = 'notif-section-header header-stock';
+            secHeader.innerHTML = `
+                <div class="sec-header-left">
+                    <i data-lucide="alert-circle"></i>
+                    <span>STOCK & WAREHOUSE RESERVES</span>
+                </div>
+                <span class="sec-header-badge badge-yellow">${lowStockList.length} LOW</span>
+            `;
+            container.appendChild(secHeader);
+
+            lowStockList.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'notif-card card-stock';
+                const avail = typeof item.availableQuantity === 'number' ? item.availableQuantity : item.quantity;
+                el.innerHTML = `
+                    <div class="notif-card-header">
+                        <div class="notif-card-tag tag-yellow">
+                            <i data-lucide="alert-circle"></i>
+                            <span>LOW RESERVES</span>
+                        </div>
+                        <span class="notif-card-location"><i data-lucide="map-pin"></i> ${item.location || 'Warehouse'}</span>
                     </div>
-                    <div class="log-text-content">Component <span>${item.name}</span> is low on reserves (<strong>${item.availableQuantity}</strong> units left).</div>
+                    <div class="notif-card-body">
+                        <p class="notif-card-main-text">
+                            Component <strong>${item.name}</strong> is critically low.
+                        </p>
+                        <p class="notif-card-sub-text">
+                            Available: <strong class="text-yellow">${avail}</strong> / ${item.quantity} total &bull; Category: ${item.category}
+                        </p>
+                    </div>
                 `;
-                logsList.appendChild(logEl);
+                container.appendChild(el);
             });
-        }
+        };
 
-        // 4. Live Activity & Audit Transaction History
-        const heading = document.createElement('div');
-        heading.className = 'drawer-section-heading';
-        heading.innerHTML = `<span><i data-lucide="activity" style="width:13px;height:13px;color:#a855f7;vertical-align:middle;"></i> Activity History & Audit Logs (${logs.length})</span>`;
-        logsList.appendChild(heading);
+        const renderRequestsSection = (container: HTMLElement) => {
+            if (visibleRequests.length === 0) {
+                container.appendChild(ModalManager.createEmptyNotifCard('send', 'No Hardware Requisitions', isAdmin ? 'No component issue requests submitted by members.' : 'You have not submitted any hardware issue requests yet.'));
+                return;
+            }
 
-        if (logs.length === 0) {
-            const emptyEl = document.createElement('div');
-            emptyEl.className = 'request-empty-state';
-            emptyEl.innerText = 'No transaction logs recorded yet.';
-            logsList.appendChild(emptyEl);
-        } else {
-            logs.forEach(log => {
-                const logEl = document.createElement('div');
-                logEl.className = `log-item log-action-${log.type}`;
+            const secHeader = document.createElement('div');
+            secHeader.className = 'notif-section-header header-requests';
+            const pendingCount = visibleRequests.filter(r => r.status === 'PENDING').length;
+            secHeader.innerHTML = `
+                <div class="sec-header-left">
+                    <i data-lucide="send"></i>
+                    <span>HARDWARE ISSUE REQUESTS</span>
+                </div>
+                <span class="sec-header-badge ${pendingCount > 0 ? 'badge-yellow' : 'badge-cyan'}">${pendingCount} PENDING</span>
+            `;
+            container.appendChild(secHeader);
+
+            visibleRequests.forEach(req => {
+                const el = document.createElement('div');
+                el.className = `notif-card card-request card-request-${(req.status || 'PENDING').toLowerCase()}`;
                 
+                let statusBadge = '';
+                if (req.status === 'APPROVED') {
+                    statusBadge = `<span class="notif-status-badge badge-green"><i data-lucide="check-circle-2"></i> APPROVED</span>`;
+                } else if (req.status === 'REJECTED') {
+                    statusBadge = `<span class="notif-status-badge badge-red"><i data-lucide="x-circle"></i> REJECTED</span>`;
+                } else {
+                    statusBadge = `<span class="notif-status-badge badge-yellow"><i data-lucide="clock"></i> PENDING REVIEW</span>`;
+                }
+
+                const actionsHtml = (isAdmin && req.status === 'PENDING') ? `
+                    <div class="notif-card-actions">
+                        <button class="notif-action-btn notif-btn-approve" data-req-id="${req.id}">
+                            <i data-lucide="check"></i> Approve
+                        </button>
+                        <button class="notif-action-btn notif-btn-reject" data-req-id="${req.id}">
+                            <i data-lucide="x"></i> Reject
+                        </button>
+                    </div>
+                ` : '';
+
+                el.innerHTML = `
+                    <div class="notif-card-header">
+                        <div class="notif-card-tag tag-purple">
+                            <i data-lucide="send"></i>
+                            <span>REQUEST #${req.id.slice(-5)}</span>
+                        </div>
+                        ${statusBadge}
+                    </div>
+                    <div class="notif-card-body">
+                        <p class="notif-card-main-text">
+                            <strong>${req.qty}x ${req.itemName}</strong> requested by <span class="notif-user-pill">${req.name}</span> (${req.roll || 'Student'})
+                        </p>
+                        <p class="notif-card-sub-text">
+                            Purpose: ${req.purpose || 'Project'} &bull; Requested on: ${req.requestedAt || 'Recent'}
+                            ${req.dueDate ? ` &bull; Expected Return: ${req.dueDate}` : ''}
+                        </p>
+                    </div>
+                    ${actionsHtml}
+                `;
+
+                container.appendChild(el);
+            });
+
+            // Bind inline action buttons for admin
+            if (isAdmin) {
+                container.querySelectorAll<HTMLButtonElement>('.notif-btn-approve').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const reqId = btn.getAttribute('data-req-id');
+                        if (reqId) {
+                            ModalManager.reviewRequest(reqId, 'APPROVED');
+                            ToastManager.show('Request Approved', 'Component checked out and loan logged.', 'success');
+                        }
+                    });
+                });
+                container.querySelectorAll<HTMLButtonElement>('.notif-btn-reject').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const reqId = btn.getAttribute('data-req-id');
+                        if (reqId) {
+                            ModalManager.reviewRequest(reqId, 'REJECTED');
+                            ToastManager.show('Request Rejected', 'Requisition declined.', 'info');
+                        }
+                    });
+                });
+            }
+        };
+
+        const renderSystemSection = (container: HTMLElement) => {
+            if (visibleLogs.length === 0) {
+                container.appendChild(ModalManager.createEmptyNotifCard('terminal', 'No Activity Recorded', 'System and transaction audit trail will populate as actions occur.'));
+                return;
+            }
+
+            const secHeader = document.createElement('div');
+            secHeader.className = 'notif-section-header header-system';
+            secHeader.innerHTML = `
+                <div class="sec-header-left">
+                    <i data-lucide="terminal"></i>
+                    <span>SYSTEM AUDIT & LOGS</span>
+                </div>
+                <span class="sec-header-badge badge-purple">${visibleLogs.length} LOGS</span>
+            `;
+            container.appendChild(secHeader);
+
+            // Show latest logs first
+            const sortedLogs = [...visibleLogs].reverse().slice(0, currentCategory === 'system' ? 50 : 15);
+            sortedLogs.forEach(log => {
+                const el = document.createElement('div');
+                el.className = `log-item log-action-${log.type}`;
+
                 let icon = 'info';
                 let label = log.type.toUpperCase();
 
-                if (log.type === 'borrow') {
-                    icon = 'shopping-cart';
-                    label = 'BORROW';
-                } else if (log.type === 'return') {
-                    icon = 'corner-up-left';
-                    label = 'RETURNED';
-                } else if (log.type === 'overdue') {
-                    icon = 'clock-alert';
-                    label = 'OVERDUE';
-                } else if (log.type === 'low_stock') {
-                    icon = 'alert-circle';
-                    label = 'LOW STOCK';
-                } else if (log.type === 'add') {
-                    icon = 'plus';
-                    label = 'NEW COMPONENT';
-                } else if (log.type === 'system') {
-                    icon = 'info';
-                    label = 'SYSTEM';
-                } else if (log.type === 'request') {
-                    icon = 'send';
-                    label = 'REQUEST';
-                } else if (log.type === 'approve') {
-                    icon = 'check';
-                    label = 'APPROVED';
-                } else if (log.type === 'reject') {
-                    icon = 'x';
-                    label = 'REJECTED';
-                }
+                if (log.type === 'borrow') { icon = 'shopping-cart'; label = 'BORROW'; }
+                else if (log.type === 'return') { icon = 'corner-up-left'; label = 'RETURNED'; }
+                else if (log.type === 'overdue') { icon = 'clock-alert'; label = 'OVERDUE'; }
+                else if (log.type === 'low_stock') { icon = 'alert-circle'; label = 'LOW STOCK'; }
+                else if (log.type === 'add') { icon = 'plus'; label = 'NEW COMPONENT'; }
+                else if (log.type === 'system') { icon = 'terminal'; label = 'SYSTEM'; }
+                else if (log.type === 'request') { icon = 'send'; label = 'REQUEST'; }
+                else if (log.type === 'approve') { icon = 'check'; label = 'APPROVED'; }
+                else if (log.type === 'reject') { icon = 'x'; label = 'REJECTED'; }
 
                 const dt = DashboardManager.formatLogDateTime(log.timestamp);
-                logEl.innerHTML = `
+                el.innerHTML = `
                     <div class="log-meta">
                         <span class="log-type-tag"><i data-lucide="${icon}"></i> ${label}</span>
                         <div class="log-timestamp-stack">
@@ -2076,12 +2412,34 @@ class ModalManager {
                     </div>
                     <div class="log-text-content">${log.text}</div>
                 `;
-                logsList.appendChild(logEl);
+                container.appendChild(el);
             });
-        }
+        };
 
-        this.open('logs-drawer');
-        lucide.createIcons();
+        if (currentCategory === 'return') {
+            renderReturnsSection(logsList);
+        } else if (currentCategory === 'stock') {
+            renderStockSection(logsList);
+        } else if (currentCategory === 'requests') {
+            renderRequestsSection(logsList);
+        } else if (currentCategory === 'system') {
+            renderSystemSection(logsList);
+        } else {
+            renderReturnsSection(logsList);
+        }
+    }
+
+    private static createEmptyNotifCard(icon: string, title: string, desc: string): HTMLElement {
+        const div = document.createElement('div');
+        div.className = 'notif-empty-state';
+        div.innerHTML = `
+            <div class="notif-empty-icon-box">
+                <i data-lucide="${icon}"></i>
+            </div>
+            <h4>${title}</h4>
+            <p>${desc}</p>
+        `;
+        return div;
     }
 
     private static async handleAddItemSubmit() {
@@ -2343,513 +2701,6 @@ class ModalManager {
         this.openDetailModal(selectedItem);
         ToastManager.show('Item Returned', `Restored ${rec.qty}x ${selectedItem.name}`, 'info');
         window.dashboard!.init();
-    }
-}
-
-// ==========================================
-// 5.5 Command Palette & Universal Search Manager
-// ==========================================
-class CommandPaletteManager {
-    private static isOpen = false;
-    private static selectedIndex = 0;
-    private static currentItems: Array<{
-        type: 'page' | 'component' | 'action';
-        title: string;
-        sub: string;
-        badge?: string;
-        badgeClass?: string;
-        icon: string;
-        action: () => void;
-    }> = [];
-
-    public static init() {
-        const modal = document.getElementById('command-palette-modal');
-        const input = document.getElementById('command-palette-input') as HTMLInputElement | null;
-        const closeBtn = document.getElementById('command-palette-close');
-        const headerSearch = document.getElementById('header-search-box') || document.querySelector('.header-search');
-        const sidebarCommandBtn = document.getElementById('sidebar-command-btn');
-
-        if (sidebarCommandBtn) {
-            sidebarCommandBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.open();
-            });
-        }
-
-        if (headerSearch) {
-            headerSearch.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.open();
-            });
-        }
-
-        // Global shortcut Ctrl+K or Cmd+K
-        window.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-                e.preventDefault();
-                if (this.isOpen) {
-                    this.close();
-                } else {
-                    this.open();
-                }
-            } else if (e.key === 'Escape' && this.isOpen) {
-                this.close();
-            }
-        });
-
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    this.close();
-                }
-            });
-        }
-
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.close());
-        }
-
-        if (input) {
-            input.addEventListener('input', () => {
-                this.renderResults(input.value.trim());
-            });
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    this.navigate(1);
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    this.navigate(-1);
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.executeSelected();
-                }
-            });
-        }
-    }
-
-    public static open(initialQuery: string = '') {
-        const modal = document.getElementById('command-palette-modal');
-        const input = document.getElementById('command-palette-input') as HTMLInputElement | null;
-        if (!modal) return;
-
-        this.isOpen = true;
-        modal.classList.add('active');
-
-        if (input) {
-            input.value = initialQuery;
-            setTimeout(() => input.focus(), 60);
-        }
-
-        this.renderResults(initialQuery);
-    }
-
-    public static close() {
-        const modal = document.getElementById('command-palette-modal');
-        if (!modal) return;
-        this.isOpen = false;
-        modal.classList.remove('active');
-    }
-
-    private static navigate(direction: number) {
-        if (this.currentItems.length === 0) return;
-        this.selectedIndex = (this.selectedIndex + direction + this.currentItems.length) % this.currentItems.length;
-        this.highlightSelected();
-    }
-
-    private static highlightSelected() {
-        const items = document.querySelectorAll('.command-item');
-        items.forEach((item, idx) => {
-            if (idx === this.selectedIndex) {
-                item.classList.add('selected');
-                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            } else {
-                item.classList.remove('selected');
-            }
-        });
-    }
-
-    private static executeSelected() {
-        if (this.currentItems[this.selectedIndex]) {
-            this.currentItems[this.selectedIndex].action();
-        }
-    }
-
-    public static renderResults(query: string) {
-        const container = document.getElementById('command-palette-results');
-        if (!container) return;
-
-        this.selectedIndex = 0;
-        this.currentItems = [];
-
-        const q = query.toLowerCase().trim();
-        const role = ModalManager.getCurrentRole();
-
-        // 1. Pages definition
-        const pages = [
-            {
-                id: 'dashboard-view',
-                title: 'Dashboard Overview',
-                keywords: ['dashboard', 'home', 'main', 'overview', 'stats', 'analytics'],
-                sub: 'System metrics, active loans & quick stats',
-                icon: 'layout-dashboard',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('dashboard-view');
-                }
-            },
-            {
-                id: 'inventory-view',
-                title: 'Inventory Vault',
-                keywords: ['inventory', 'vault', 'components', 'hardware', 'stock', 'parts', 'items', 'borrow', 'return'],
-                sub: 'Browse & request microcontrollers, sensors, modules & tools',
-                icon: 'package',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('inventory-view');
-                }
-            },
-            {
-                id: 'developers-view',
-                title: 'Meet The Developers',
-                keywords: ['developers', 'devs', 'team', 'creators', 'mentors', 'guidance', 'gunjan', 'aryan', 'dhruvi', 'vardaan', 'contact'],
-                sub: 'Under The Guidance of & Core Development Team',
-                icon: 'terminal',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('developers-view');
-                }
-            },
-            {
-                id: 'projects-view',
-                title: 'Projects Showcase',
-                keywords: ['projects', 'showcase', 'research', 'innovations', 'robotics', 'portfolio', 'hardware'],
-                sub: 'Robotics club research projects and innovations',
-                icon: 'folder-git-2',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('projects-view');
-                }
-            },
-            {
-                id: 'meetings-view',
-                title: 'Team Meetings',
-                keywords: ['meetings', 'schedule', 'agenda', 'minutes', 'discussion', 'lab meet'],
-                sub: 'Lab meetings schedule, agendas, and logs',
-                icon: 'users',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('meetings-view');
-                }
-            },
-            {
-                id: 'events-view',
-                title: 'Hackathons & Events',
-                keywords: ['events', 'hackathons', 'competitions', 'workshops', 'calendar'],
-                sub: 'Upcoming robotics competitions and workshops',
-                icon: 'calendar',
-                badge: 'PAGE',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('events-view');
-                }
-            }
-        ];
-
-        if (role === 'ADMIN') {
-            pages.push({
-                id: 'admin-view',
-                title: 'Admin Management Portal',
-                keywords: ['admin', 'portal', 'users', 'approvals', 'members', 'permissions', 'audit', 'logs', 'root', 'master'],
-                sub: 'Manage members, review borrow approvals & audit logs',
-                icon: 'shield-check',
-                badge: 'ADMIN',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('admin-view');
-                }
-            });
-        }
-
-        // Actions
-        const actions = [
-            {
-                title: 'Audit Logs & Notifications',
-                keywords: ['notifications', 'logs', 'history', 'activity', 'alerts', 'drawer'],
-                sub: 'View system notifications and loan history',
-                icon: 'bell',
-                badge: 'ACTION',
-                action: () => {
-                    this.close();
-                    ModalManager.openLogsDrawer();
-                }
-            },
-            {
-                title: 'Reset Password',
-                keywords: ['password', 'reset', 'change password', 'credentials', 'security', 'key'],
-                sub: 'Update your account login password',
-                icon: 'key-round',
-                badge: 'SECURITY',
-                action: () => {
-                    this.close();
-                    ModalManager.open('reset-password-modal');
-                }
-            },
-            {
-                title: 'Theme: Cyber Neon',
-                keywords: ['theme', 'dark', 'cyber', 'neon', 'blue', 'cyan', 'mode'],
-                sub: 'Switch to signature dark cyan neon aesthetic',
-                icon: 'zap',
-                badge: 'THEME',
-                action: () => {
-                    this.close();
-                    ThemeManager.applyTheme('cyberpunk');
-                }
-            },
-            {
-                title: 'Theme: Clean Light',
-                keywords: ['theme', 'light', 'day', 'white', 'bright'],
-                sub: 'Switch to daylight high-contrast theme',
-                icon: 'sun',
-                badge: 'THEME',
-                action: () => {
-                    this.close();
-                    ThemeManager.applyTheme('light');
-                }
-            },
-            {
-                title: 'Theme: Cherry Blossom',
-                keywords: ['theme', 'sakura', 'pink', 'cherry blossom', 'pastel'],
-                sub: 'Switch to pastel sakura blossom theme',
-                icon: 'sparkles',
-                badge: 'THEME',
-                action: () => {
-                    this.close();
-                    ThemeManager.applyTheme('sakura');
-                }
-            }
-        ];
-
-        if (role === 'ADMIN') {
-            actions.unshift({
-                title: 'Register New Hardware Component',
-                keywords: ['add', 'new component', 'create', 'register', 'inventory item', 'hardware'],
-                sub: 'Add fresh hardware component to vault stock',
-                icon: 'plus-circle',
-                badge: 'ADMIN',
-                action: () => {
-                    this.close();
-                    ModalManager.open('add-item-modal');
-                }
-            });
-        }
-
-        // Filter Pages
-        const matchingPages = pages.filter(p => {
-            if (!q) return true;
-            return p.title.toLowerCase().includes(q) ||
-                   p.sub.toLowerCase().includes(q) ||
-                   p.keywords.some(k => k.includes(q));
-        });
-
-        // Filter Actions
-        const matchingActions = actions.filter(a => {
-            if (!q) return false;
-            return a.title.toLowerCase().includes(q) ||
-                   a.sub.toLowerCase().includes(q) ||
-                   a.keywords.some(k => k.includes(q));
-        });
-
-        // Filter Components from inventory
-        const matchingComponents = (inventory || []).filter(item => {
-            if (!q) return false;
-            const tagsStr = (item.tags || []).join(' ').toLowerCase();
-            return item.name.toLowerCase().includes(q) ||
-                   (item.category || '').toLowerCase().includes(q) ||
-                   (item.specs || '').toLowerCase().includes(q) ||
-                   (item.location || '').toLowerCase().includes(q) ||
-                   tagsStr.includes(q);
-        }).slice(0, 12);
-
-        let html = '';
-
-        // Render matching pages
-        if (matchingPages.length > 0) {
-            html += `<div class="command-group-heading">PAGES & WORKSPACES</div>`;
-            matchingPages.forEach(p => {
-                const itemIndex = this.currentItems.length;
-                this.currentItems.push({
-                    type: 'page',
-                    title: p.title,
-                    sub: p.sub,
-                    badge: p.badge,
-                    badgeClass: 'command-badge-page',
-                    icon: p.icon,
-                    action: p.action
-                });
-
-                html += `
-                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
-                        <div class="command-item-icon"><i data-lucide="${p.icon}"></i></div>
-                        <div class="command-item-body">
-                            <div class="command-item-title">${this.escapeHtml(p.title)}</div>
-                            <div class="command-item-sub">${this.escapeHtml(p.sub)}</div>
-                        </div>
-                        <span class="command-item-badge command-badge-page">${p.badge}</span>
-                    </div>
-                `;
-            });
-        }
-
-        // Render matching components
-        if (matchingComponents.length > 0) {
-            html += `<div class="command-group-heading">HARDWARE INVENTORY (${matchingComponents.length})</div>`;
-            matchingComponents.forEach(item => {
-                const itemIndex = this.currentItems.length;
-                const borrowedSum = (item.borrowedBy || []).reduce((sum, rec) => sum + rec.qty, 0);
-                const available = typeof item.availableQuantity === 'number'
-                    ? item.availableQuantity
-                    : Math.max(0, item.quantity - borrowedSum);
-                const isOutOfStock = available === 0;
-
-                const stockBadge = isOutOfStock ? 'OUT OF STOCK' : `${available} AVAILABLE`;
-                const badgeClass = isOutOfStock ? 'command-badge-out' : 'command-badge-stock';
-                const subText = `${item.category.toUpperCase()} • Location: ${item.location || 'Lab Shelf'} • ${item.specs || ''}`;
-
-                this.currentItems.push({
-                    type: 'component',
-                    title: item.name,
-                    sub: subText,
-                    badge: stockBadge,
-                    badgeClass,
-                    icon: 'cpu',
-                    action: () => {
-                        this.close();
-                        DashboardManager.switchSection('inventory-view');
-                        setTimeout(() => {
-                            const searchInp = document.getElementById('search-input') as HTMLInputElement;
-                            if (searchInp && window.dashboard) {
-                                searchInp.value = item.name;
-                                window.dashboard.searchQuery = item.name.toLowerCase();
-                                window.dashboard.renderInventory();
-                            }
-                            ModalManager.openDetailModal(item);
-                        }, 120);
-                    }
-                });
-
-                html += `
-                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
-                        <div class="command-item-icon"><i data-lucide="cpu"></i></div>
-                        <div class="command-item-body">
-                            <div class="command-item-title">${this.escapeHtml(item.name)}</div>
-                            <div class="command-item-sub">${this.escapeHtml(subText)}</div>
-                        </div>
-                        <span class="command-item-badge ${badgeClass}">${stockBadge}</span>
-                    </div>
-                `;
-            });
-        }
-
-        // Render matching actions
-        if (matchingActions.length > 0) {
-            html += `<div class="command-group-heading">ACTIONS & SYSTEM</div>`;
-            matchingActions.forEach(a => {
-                const itemIndex = this.currentItems.length;
-                this.currentItems.push({
-                    type: 'action',
-                    title: a.title,
-                    sub: a.sub,
-                    badge: a.badge,
-                    badgeClass: 'command-badge-page',
-                    icon: a.icon,
-                    action: a.action
-                });
-
-                html += `
-                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
-                        <div class="command-item-icon"><i data-lucide="${a.icon}"></i></div>
-                        <div class="command-item-body">
-                            <div class="command-item-title">${this.escapeHtml(a.title)}</div>
-                            <div class="command-item-sub">${this.escapeHtml(a.sub)}</div>
-                        </div>
-                        <span class="command-item-badge command-badge-page">${a.badge}</span>
-                    </div>
-                `;
-            });
-        }
-
-        // Render Fallback "Search in Inventory" if user typed something
-        if (q) {
-            const itemIndex = this.currentItems.length;
-            this.currentItems.push({
-                type: 'action',
-                title: `Filter inventory for "${query}"`,
-                sub: 'Open Inventory Vault and filter all matching components',
-                badge: 'SEARCH',
-                badgeClass: 'command-badge-stock',
-                icon: 'search',
-                action: () => {
-                    this.close();
-                    DashboardManager.switchSection('inventory-view');
-                    setTimeout(() => {
-                        const searchInp = document.getElementById('search-input') as HTMLInputElement;
-                        if (searchInp && window.dashboard) {
-                            searchInp.value = query;
-                            window.dashboard.searchQuery = query.toLowerCase();
-                            window.dashboard.renderInventory();
-                            searchInp.focus();
-                        }
-                    }, 120);
-                }
-            });
-
-            html += `
-                <div class="command-group-heading">DIRECT SEARCH</div>
-                <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
-                    <div class="command-item-icon"><i data-lucide="search"></i></div>
-                    <div class="command-item-body">
-                        <div class="command-item-title">Search Vault for <em>"${this.escapeHtml(query)}"</em></div>
-                        <div class="command-item-sub">Switch to Inventory Vault with this keyword</div>
-                    </div>
-                    <span class="command-item-badge command-badge-stock">ENTER &rarr;</span>
-                </div>
-            `;
-        }
-
-        if (this.currentItems.length === 0) {
-            html = `
-                <div class="command-empty-state">
-                    <i data-lucide="search-x" style="width:28px;height:28px;display:block;margin:0 auto 10px auto;color:#64748b;"></i>
-                    No matching components, pages, or commands found for "${this.escapeHtml(query)}".
-                </div>
-            `;
-        }
-
-        container.innerHTML = html;
-        lucide.createIcons();
-
-        // Attach click listeners to all rendered items
-        container.querySelectorAll('.command-item').forEach(el => {
-            el.addEventListener('click', () => {
-                const idx = Number((el as HTMLElement).dataset.index);
-                if (this.currentItems[idx]) {
-                    this.currentItems[idx].action();
-                }
-            });
-        });
-    }
-
-    private static escapeHtml(str: string): string {
-        const div = document.createElement('div');
-        div.innerText = str;
-        return div.innerHTML;
     }
 }
 
@@ -3215,11 +3066,7 @@ class AuthManager {
                 }
             });
 
-            // Make sure the header search box is visible in dashboard view on login
-            const headerSearchBox = document.querySelector('.header-search') as HTMLElement;
-            if (headerSearchBox) {
-                headerSearchBox.style.display = 'flex';
-            }
+
 
             const breadcrumbActive = document.getElementById('breadcrumb-current');
             if (breadcrumbActive) breadcrumbActive.innerText = 'DASHBOARD';
@@ -3612,6 +3459,7 @@ class AdminManager {
     private static auditLogs: any[] = [];
     private static activeAuditCategory = 'all';
     private static auditSearchTerm = '';
+    private static activeUserRoleFilter = 'all';
     private static isInitialized = false;
 
     static init() {
@@ -3620,15 +3468,46 @@ class AdminManager {
 
         const refreshBtn = document.getElementById('admin-refresh-btn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                this.loadUsers();
+            refreshBtn.addEventListener('click', async () => {
+                const icon = refreshBtn.querySelector('i');
+                if (icon) icon.classList.add('animate-spin');
+                refreshBtn.setAttribute('disabled', 'true');
+                try {
+                    await this.loadUsers(true);
+                    ToastManager.show('Directory Refreshed', 'User accounts and roles updated.', 'info');
+                } finally {
+                    if (icon) icon.classList.remove('animate-spin');
+                    refreshBtn.removeAttribute('disabled');
+                }
             });
         }
 
         const hwRefreshBtn = document.getElementById('admin-hw-refresh-btn');
         if (hwRefreshBtn) {
-            hwRefreshBtn.addEventListener('click', () => {
-                this.loadHardwareRequests();
+            hwRefreshBtn.addEventListener('click', async () => {
+                const icon = hwRefreshBtn.querySelector('i');
+                if (icon) icon.classList.add('animate-spin');
+                hwRefreshBtn.setAttribute('disabled', 'true');
+                try {
+                    await this.loadHardwareRequests(true);
+                    ToastManager.show('Queue Refreshed', 'Hardware issue requests updated.', 'info');
+                } finally {
+                    if (icon) icon.classList.remove('animate-spin');
+                    hwRefreshBtn.removeAttribute('disabled');
+                }
+            });
+        }
+
+        const rolePills = document.getElementById('admin-users-role-pills');
+        if (rolePills) {
+            rolePills.querySelectorAll<HTMLButtonElement>('.audit-pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    const filter = pill.getAttribute('data-user-filter') || 'all';
+                    this.activeUserRoleFilter = filter;
+                    rolePills.querySelectorAll('.audit-pill').forEach(p => p.classList.toggle('active', p === pill));
+                    const searchInput = document.getElementById('admin-users-search') as HTMLInputElement;
+                    this.renderUsersTable(this.filterUsers(searchInput ? searchInput.value : ''));
+                });
             });
         }
 
@@ -3641,8 +3520,17 @@ class AdminManager {
 
         const auditRefreshBtn = document.getElementById('admin-audit-refresh-btn');
         if (auditRefreshBtn) {
-            auditRefreshBtn.addEventListener('click', () => {
-                this.loadAuditLogs();
+            auditRefreshBtn.addEventListener('click', async () => {
+                const icon = auditRefreshBtn.querySelector('i');
+                if (icon) icon.classList.add('animate-spin');
+                auditRefreshBtn.setAttribute('disabled', 'true');
+                try {
+                    await this.loadAuditLogs();
+                    ToastManager.show('Audit Refreshed', 'System audit logs updated.', 'info');
+                } finally {
+                    if (icon) icon.classList.remove('animate-spin');
+                    auditRefreshBtn.removeAttribute('disabled');
+                }
             });
         }
 
@@ -3675,12 +3563,12 @@ class AdminManager {
         window.adminRejectHardware = (id: string) => this.rejectHardware(id);
     }
 
-    static async loadUsers() {
+    static async loadUsers(force = false) {
         const token = localStorage.getItem('cicr_token');
         if (!token) return;
 
         try {
-            const res = await fetch(`${API_BASE}/auth/admin/users`, {
+            const res = await fetch(`${API_BASE}/auth/admin/users${force ? '?force=true' : ''}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -3781,7 +3669,6 @@ class AdminManager {
         });
 
 
-        await this.loadHardwareRequests();
         this.updateStats();
         this.renderPendingQueue();
 
@@ -3790,15 +3677,15 @@ class AdminManager {
         this.renderUsersTable(this.filterUsers(query));
     }
 
-    static async loadHardwareRequests() {
+    static async loadHardwareRequests(force = false) {
         const token = localStorage.getItem('cicr_token');
         if (!token) return;
 
         let serverList: AdminHardwareRequest[] = [];
 
-        // 1. Fetch from hardware requests endpoint
+        // 1. Fetch from hardware requests endpoint (backend merges local requests & Supabase pending records)
         try {
-            const res = await fetch(`${API_BASE}/borrow/requests`, {
+            const res = await fetch(`${API_BASE}/borrow/requests${force ? '?force=true' : ''}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -3810,38 +3697,7 @@ class AdminManager {
             console.error('Failed to fetch hardware requests:', err);
         }
 
-        // 2. Fetch live borrow records from backend / Supabase to find any PENDING requests
-        let livePending: AdminHardwareRequest[] = [];
-        try {
-            const historyRes = await fetch(`${API_BASE}/borrow/history`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (historyRes.ok) {
-                const hJson = await historyRes.json();
-                const allHistory: any[] = hJson.data || [];
-                livePending = allHistory
-                    .filter((b: any) => b.status === 'PENDING')
-                    .map((b: any) => ({
-                        id: b.id,
-                        itemId: b.inventory_id,
-                        itemName: b.inventory?.name || 'Hardware Component',
-                        category: b.inventory?.category || 'Robotics',
-                        borrowerName: b.borrower_name || b.users?.name || 'Member',
-                        borrowerEmail: b.users?.email || (b.roll_number ? `${b.roll_number}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in'),
-                        rollNumber: b.roll_number || b.users?.roll_number || null,
-                        quantity: Number(b.quantity) || 1,
-                        purpose: b.purpose || 'Project Testing',
-                        durationDays: 7,
-                        dueDate: b.due_date ? b.due_date.split('T')[0] : '7 Days',
-                        status: 'PENDING' as const,
-                        requestedAt: b.borrowed_at || new Date().toISOString()
-                    }));
-            }
-        } catch (he) {
-            console.warn('Failed to load borrow history for pending requests:', he);
-        }
-
-        // 3. Collect from local requests state and localStorage
+        // 2. Collect from local requests state and localStorage
         const localStoredRaw = localStorage.getItem('cicr_requests');
         let localRequests: RequestRecord[] = [];
         if (localStoredRaw) {
@@ -3869,7 +3725,7 @@ class AdminManager {
         const merged: AdminHardwareRequest[] = [...serverList];
         const seenKeys = new Set(merged.map(m => m.id));
 
-        for (const item of [...livePending, ...localPending]) {
+        for (const item of localPending) {
             const key = item.id;
             const contentKey = `${item.itemId}_${item.borrowerName}_${item.purpose}_${item.quantity}`;
             if (!seenKeys.has(key) && !seenKeys.has(contentKey)) {
@@ -3974,59 +3830,93 @@ class AdminManager {
     static async approveHardware(id: string) {
         const token = localStorage.getItem('cicr_token');
         const targetReq = this.hardwareRequests.find(r => r.id === id);
+        const reqSnapshot = targetReq ? { ...targetReq } : null;
 
+        // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE (Zero Latency)
+        this.hardwareRequests = this.hardwareRequests.filter(r => r.id !== id);
+        requests = requests.filter(r => r.id !== id);
+        this.updateStats();
+        this.renderHardwareQueue();
+
+        // Immediately purge from localStorage
+        const localStoredRaw = localStorage.getItem('cicr_requests');
+        if (localStoredRaw) {
+            try {
+                const parsed = JSON.parse(localStoredRaw);
+                const filtered = parsed.filter((r: any) => r.id !== id);
+                localStorage.setItem('cicr_requests', JSON.stringify(filtered));
+            } catch {}
+        }
+        DatabaseManager.save();
+
+        ToastManager.show('Request Authorized', `Component issue for "${reqSnapshot?.itemName || 'Hardware'}" approved.`, 'success');
+        DatabaseManager.addLog('approve', `Admin authorized hardware issue request #${id.slice(0, 8)}`);
+
+        // 2. Perform background sync to server
         try {
-            let res = await fetch(`${API_BASE}/borrow/requests/${id}/approve`, {
+            const res = await fetch(`${API_BASE}/borrow/requests/${id}/approve`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(reqSnapshot || {})
             });
 
-            // If backend returned 404 (Render fallback)
-            if (res.status === 404 && targetReq) {
-                res = await fetch(`${API_BASE}/borrow`, {
+            if (!res.ok && reqSnapshot && reqSnapshot.itemId) {
+                // Direct fallback checkout if request was only stored locally
+                await fetch(`${API_BASE}/borrow`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        inventory_id: targetReq.itemId,
-                        quantity: targetReq.quantity,
-                        purpose: targetReq.purpose,
-                        borrower_name: targetReq.borrowerName,
-                        roll_number: targetReq.rollNumber
+                        inventory_id: reqSnapshot.itemId,
+                        quantity: reqSnapshot.quantity,
+                        purpose: reqSnapshot.purpose,
+                        borrower_name: reqSnapshot.borrowerName,
+                        roll_number: reqSnapshot.rollNumber
                     })
-                });
-            }
-
-            if (res.ok) {
-                if (targetReq) {
-                    targetReq.status = 'APPROVED';
-                }
-                requests = requests.map(r => r.id === id ? { ...r, status: 'APPROVED' as const } : r);
-                DatabaseManager.save();
-
-                ToastManager.show('Request Authorized', 'Component issue approved. Stock updated and verification dispatched.', 'success');
-                DatabaseManager.addLog('approve', `Admin authorized hardware issue request #${id.slice(0, 8)}`);
-                await this.loadHardwareRequests();
-                await this.loadAuditLogs();
-                await DatabaseManager.syncFromBackend();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                ToastManager.show('Approval Failed', err.message || 'Could not approve request.', 'error');
+                }).catch(() => {});
             }
         } catch (e) {
-            console.error('Error approving hardware request:', e);
-            ToastManager.show('Network Error', 'Failed to communicate with server.', 'error');
+            console.warn('Background approval sync note:', e);
         }
+
+        // Non-blocking telemetry refresh in background
+        this.loadAuditLogs();
+        DatabaseManager.syncFromBackend();
     }
 
     static async rejectHardware(id: string) {
         const token = localStorage.getItem('cicr_token');
         const targetReq = this.hardwareRequests.find(r => r.id === id);
+        const itemName = targetReq?.itemName || 'Component';
 
+        // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE (Zero Latency)
+        this.hardwareRequests = this.hardwareRequests.filter(r => r.id !== id);
+        requests = requests.filter(r => r.id !== id);
+        this.updateStats();
+        this.renderHardwareQueue();
+
+        // Immediately purge from localStorage
+        const localStoredRaw = localStorage.getItem('cicr_requests');
+        if (localStoredRaw) {
+            try {
+                const parsed = JSON.parse(localStoredRaw);
+                const filtered = parsed.filter((r: any) => r.id !== id);
+                localStorage.setItem('cicr_requests', JSON.stringify(filtered));
+            } catch {}
+        }
+        DatabaseManager.save();
+
+        ToastManager.show('Request Declined', `Hardware issue request for "${itemName}" declined.`, 'info');
+        DatabaseManager.addLog('reject', `Admin declined hardware issue request #${id.slice(0, 8)}`);
+
+        // 2. Perform background notification to server
         try {
-            let res = await fetch(`${API_BASE}/borrow/requests/${id}/reject`, {
+            await fetch(`${API_BASE}/borrow/requests/${id}/reject`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -4034,27 +3924,12 @@ class AdminManager {
                 },
                 body: JSON.stringify({ reason: 'Declined by Administrator.' })
             });
-
-            if (res.status === 404 || res.ok) {
-                if (targetReq) {
-                    targetReq.status = 'REJECTED';
-                }
-                requests = requests.map(r => r.id === id ? { ...r, status: 'REJECTED' as const } : r);
-                DatabaseManager.save();
-
-                ToastManager.show('Request Declined', 'Hardware issue request has been declined.', 'info');
-                DatabaseManager.addLog('reject', `Admin declined hardware issue request #${id.slice(0, 8)}`);
-                await this.loadHardwareRequests();
-                await this.loadAuditLogs();
-                await DatabaseManager.syncFromBackend();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                ToastManager.show('Rejection Failed', err.message || 'Could not reject request.', 'error');
-            }
         } catch (e) {
-            console.error('Error rejecting hardware request:', e);
-            ToastManager.show('Network Error', 'Failed to communicate with server.', 'error');
+            console.warn('Background rejection sync note:', e);
         }
+
+        this.loadAuditLogs();
+        DatabaseManager.syncFromBackend();
     }
 
     private static renderPendingQueue() {
@@ -4114,20 +3989,25 @@ class AdminManager {
         const tbody = document.getElementById('admin-users-tbody');
         if (!tbody) return;
 
-        if (usersList.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-dim); font-family: 'Orbitron', sans-serif; font-size: 11px;">
-                        <i data-lucide="shield-alert" style="width:20px;height:20px;display:block;margin:0 auto 8px auto;color:#64748b;"></i>
-                        No registered users matching search.
-                    </td>
-                </tr>
-            `;
-            lucide.createIcons();
-            return;
-        }
+        const totalBadge = document.getElementById('admin-users-total-badge');
+        if (totalBadge) totalBadge.innerText = `${this.users.length} USERS`;
 
-        tbody.innerHTML = usersList.map(u => {
+        const allAdmins = this.users.filter(u => u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username));
+        const allMembers = this.users.filter(u => !(u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username)));
+
+        const pillAll = document.getElementById('pill-filter-all');
+        const pillAdmin = document.getElementById('pill-filter-admin');
+        const pillMember = document.getElementById('pill-filter-member');
+
+        if (pillAll) pillAll.innerText = `ALL (${this.users.length})`;
+        if (pillAdmin) pillAdmin.innerText = `ADMINS (${allAdmins.length})`;
+        if (pillMember) pillMember.innerText = `MEMBERS (${allMembers.length})`;
+
+        // Separate current filtered users into Admins and Members
+        const adminUsers = usersList.filter(u => u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username));
+        const memberUsers = usersList.filter(u => !(u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username)));
+
+        const renderRow = (u: AdminUserRecord): string => {
             const statusClass = u.status === 'APPROVED' ? 'approved' : u.status === 'PENDING' ? 'pending' : 'rejected';
             const isMaster = u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username);
             
@@ -4206,56 +4086,169 @@ class AdminManager {
                     <td><div class="table-actions-cell">${actionsHtml}</div></td>
                 </tr>
             `;
-        }).join('');
+        };
+
+        const renderAdminSection = (): string => {
+            if (adminUsers.length === 0) {
+                return `
+                    <tr class="user-group-divider-row admin-group-row">
+                        <td colspan="6">
+                            <div class="user-group-header">
+                                <div class="user-group-title">
+                                    <i data-lucide="crown"></i>
+                                    <span>ADMINISTRATORS & LEADERSHIP</span>
+                                </div>
+                                <span class="user-group-badge badge-cyan">0 ADMINS</span>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-dim); font-size: 11px;">
+                            No administrators found matching criteria.
+                        </td>
+                    </tr>
+                `;
+            }
+
+            return `
+                <tr class="user-group-divider-row admin-group-row">
+                    <td colspan="6">
+                        <div class="user-group-header">
+                            <div class="user-group-title">
+                                <i data-lucide="crown"></i>
+                                <span>ADMINISTRATORS & LEADERSHIP</span>
+                            </div>
+                            <span class="user-group-badge badge-cyan">${adminUsers.length} ADMINS</span>
+                        </div>
+                    </td>
+                </tr>
+                ${adminUsers.map(renderRow).join('')}
+            `;
+        };
+
+        const renderMemberSection = (): string => {
+            if (memberUsers.length === 0) {
+                return `
+                    <tr class="user-group-divider-row member-group-row">
+                        <td colspan="6">
+                            <div class="user-group-header">
+                                <div class="user-group-title">
+                                    <i data-lucide="users"></i>
+                                    <span>REGISTERED MEMBERS & STUDENTS</span>
+                                </div>
+                                <span class="user-group-badge badge-purple">0 MEMBERS</span>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-dim); font-size: 11px;">
+                            No registered members found matching criteria.
+                        </td>
+                    </tr>
+                `;
+            }
+
+            return `
+                <tr class="user-group-divider-row member-group-row">
+                    <td colspan="6">
+                        <div class="user-group-header">
+                            <div class="user-group-title">
+                                <i data-lucide="users"></i>
+                                <span>REGISTERED MEMBERS & STUDENTS</span>
+                            </div>
+                            <span class="user-group-badge badge-purple">${memberUsers.length} MEMBERS</span>
+                        </div>
+                    </td>
+                </tr>
+                ${memberUsers.map(renderRow).join('')}
+            `;
+        };
+
+        if (usersList.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-dim); font-family: 'Orbitron', sans-serif; font-size: 11px;">
+                        <i data-lucide="shield-alert" style="width:20px;height:20px;display:block;margin:0 auto 8px auto;color:#64748b;"></i>
+                        No users matching search criteria.
+                    </td>
+                </tr>
+            `;
+            lucide.createIcons();
+            return;
+        }
+
+        if (this.activeUserRoleFilter === 'admin') {
+            tbody.innerHTML = renderAdminSection();
+        } else if (this.activeUserRoleFilter === 'member') {
+            tbody.innerHTML = renderMemberSection();
+        } else {
+            tbody.innerHTML = renderAdminSection() + renderMemberSection();
+        }
 
         lucide.createIcons();
     }
 
     static async approveUser(id: string) {
         const token = localStorage.getItem('cicr_token');
+        const targetUser = this.users.find(u => u.id === id);
+        const userName = targetUser?.name || id;
+        const userEmail = targetUser?.email || '';
+
+        // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE
+        if (targetUser) {
+            targetUser.status = 'APPROVED';
+        }
+        this.updateStats();
+        this.renderPendingQueue();
+        const searchInput = document.getElementById('admin-users-search') as HTMLInputElement;
+        this.renderUsersTable(this.filterUsers(searchInput ? searchInput.value : ''));
+
+        ToastManager.show('User Approved', `Member "${userName}" has been granted access.`, 'success');
+        DatabaseManager.addLog('system', `Admin approved membership for ${userName} (${userEmail})`);
+
+        // 2. Background sync to server
         try {
-            const res = await fetch(`${API_BASE}/auth/admin/users/${id}/approve`, {
+            await fetch(`${API_BASE}/auth/admin/users/${id}/approve`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                const data = await res.json();
-                ToastManager.show('User Approved', `Member ${data.user?.name || id} has been granted access.`, 'success');
-                DatabaseManager.addLog('system', `Admin approved membership for ${data.user?.name || id} (${data.user?.email || ''})`);
-                await this.loadUsers();
-                await this.loadAuditLogs();
-                DatabaseManager.updateNotificationBadges();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                ToastManager.show('Approval Failed', err.message || 'Could not approve member', 'error');
-            }
         } catch (e) {
-            console.error('Error approving user:', e);
-            ToastManager.show('Network Error', 'Failed to communicate with server', 'error');
+            console.warn('Background user approval note:', e);
         }
+
+        this.loadAuditLogs();
+        DatabaseManager.updateNotificationBadges();
     }
 
     static async rejectUser(id: string) {
         const token = localStorage.getItem('cicr_token');
+        const targetUser = this.users.find(u => u.id === id);
+        const userName = targetUser?.name || id;
+
+        // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE
+        if (targetUser) {
+            targetUser.status = 'REJECTED';
+        }
+        this.updateStats();
+        this.renderPendingQueue();
+        const searchInput = document.getElementById('admin-users-search') as HTMLInputElement;
+        this.renderUsersTable(this.filterUsers(searchInput ? searchInput.value : ''));
+
+        ToastManager.show('User Rejected', `Membership request for "${userName}" declined.`, 'warning');
+        DatabaseManager.addLog('system', `Admin rejected membership request for ${userName}`);
+
+        // 2. Background sync to server
         try {
-            const res = await fetch(`${API_BASE}/auth/admin/users/${id}/reject`, {
+            await fetch(`${API_BASE}/auth/admin/users/${id}/reject`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) {
-                ToastManager.show('User Rejected', 'Membership request was rejected.', 'warning');
-                DatabaseManager.addLog('system', `Admin rejected membership request for user ID ${id}`);
-                await this.loadUsers();
-                await this.loadAuditLogs();
-                DatabaseManager.updateNotificationBadges();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                ToastManager.show('Rejection Failed', err.message || 'Could not reject member', 'error');
-            }
         } catch (e) {
-            console.error('Error rejecting user:', e);
-            ToastManager.show('Network Error', 'Failed to communicate with server', 'error');
+            console.warn('Background user rejection note:', e);
         }
+
+        this.loadAuditLogs();
+        DatabaseManager.updateNotificationBadges();
     }
 
     static async setRole(id: string, role: 'ADMIN' | 'MEMBER') {
@@ -4875,7 +4868,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.init();
     DatabaseManager.init();
     ModalManager.init();
-    CommandPaletteManager.init();
+
     AuthManager.init();
     AdminManager.init();
     DatabaseManager.startAutoSync(6000);

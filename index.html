@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CICR Inventory</title>
-    
+
     <!-- Primary Meta Tags -->
     <meta name="title" content="CICR Inventory">
-    <meta name="description" content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
-    <meta name="keywords" content="CICR, Robotics, Inventory, JIIT, JIIT-128, Robotics Lab, Sensors, Microcontrollers, Hardware Management, CICR Inventory">
+    <meta name="description"
+        content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
+    <meta name="keywords"
+        content="CICR, Robotics, Inventory, JIIT, JIIT-128, Robotics Lab, Sensors, Microcontrollers, Hardware Management, CICR Inventory">
     <meta name="author" content="CICR Development Team">
     <meta name="theme-color" content="#00f0ff">
 
@@ -16,7 +19,8 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://cicr-inventory.vercel.app/">
     <meta property="og:title" content="CICR Inventory">
-    <meta property="og:description" content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
+    <meta property="og:description"
+        content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
     <meta property="og:image" content="https://cicr-inventory.vercel.app/logo.png">
     <meta property="og:image:secure_url" content="https://cicr-inventory.vercel.app/logo.png">
     <meta property="og:image:type" content="image/png">
@@ -29,7 +33,8 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:url" content="https://cicr-inventory.vercel.app/">
     <meta name="twitter:title" content="CICR Inventory">
-    <meta name="twitter:description" content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
+    <meta name="twitter:description"
+        content="Official Inventory & Hardware Portal for CICR — The Robotics Society of JIIT-128 Noida. Explore, track, and manage microcontrollers, sensors, actuators, and robotics gear with ease.">
     <meta name="twitter:image" content="https://cicr-inventory.vercel.app/logo.png">
 
     <link rel="icon" type="image/png" href="/logo.png" />
@@ -37,7 +42,9 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&family=Playfair+Display:wght@500;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&family=Playfair+Display:wght@500;700;800;900&family=Rajdhani:wght@500;600;700&display=swap"
+        rel="stylesheet">
     <!-- Stylesheets & Essential Preload -->
     <link rel="stylesheet" href="/src/style.css">
     <style>
@@ -50,7 +57,9 @@
             display: block;
             margin: 0 auto 12px auto;
         }
-        .logo-img, .sidebar-logo-img {
+
+        .logo-img,
+        .sidebar-logo-img {
             width: 36px !important;
             height: 36px !important;
             max-width: 36px !important;
@@ -62,6 +71,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script type="module" src="/src/main.ts"></script>
 </head>
+
 <body>
     <!-- 3D Canvas Background & Sakura Falling Leaves -->
     <canvas id="canvas-3d"></canvas>
@@ -85,22 +95,25 @@
                     <i data-lucide="user-plus"></i> Register
                 </button>
             </div>
-            
+
             <!-- Login Form -->
             <form id="login-form">
                 <div class="form-group">
                     <label for="login-username">Email, Username, or Name</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="user" class="input-icon"></i>
-                        <input type="text" id="login-username" required placeholder="Enter your name, email, or username" autocomplete="username">
+                        <input type="text" id="login-username" required
+                            placeholder="Enter your name, email, or username" autocomplete="username">
                     </div>
                 </div>
                 <div class="form-group">
                     <label for="login-password">Password</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="lock" class="input-icon"></i>
-                        <input type="password" id="login-password" required placeholder="Enter your password" autocomplete="current-password">
-                        <button type="button" class="password-toggle-btn" id="login-password-toggle" title="Toggle password visibility">
+                        <input type="password" id="login-password" required placeholder="Enter your password"
+                            autocomplete="current-password">
+                        <button type="button" class="password-toggle-btn" id="login-password-toggle"
+                            title="Toggle password visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
@@ -126,21 +139,24 @@
                         <label for="signup-name">Full Name</label>
                         <div class="input-icon-wrapper">
                             <i data-lucide="user" class="input-icon"></i>
-                            <input type="text" id="signup-name" required placeholder="Enter full name" autocomplete="name">
+                            <input type="text" id="signup-name" required placeholder="Enter full name"
+                                autocomplete="name">
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="signup-username">Username</label>
                         <div class="input-icon-wrapper">
                             <i data-lucide="at-sign" class="input-icon"></i>
-                            <input type="text" id="signup-username" required placeholder="Choose username" autocomplete="username">
+                            <input type="text" id="signup-username" required placeholder="Choose username"
+                                autocomplete="username">
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="signup-email">College Email (@mail.jiit.ac.in)</label>
                         <div class="input-icon-wrapper">
                             <i data-lucide="mail" class="input-icon"></i>
-                            <input type="email" id="signup-email" required placeholder="enrollment@mail.jiit.ac.in" autocomplete="email">
+                            <input type="email" id="signup-email" required placeholder="enrollment@mail.jiit.ac.in"
+                                autocomplete="email">
                         </div>
                     </div>
                     <div class="form-group">
@@ -161,8 +177,10 @@
                         <label for="signup-password">Choose Password</label>
                         <div class="input-icon-wrapper">
                             <i data-lucide="lock" class="input-icon"></i>
-                            <input type="password" id="signup-password" required placeholder="Min. 6 characters" autocomplete="new-password">
-                            <button type="button" class="password-toggle-btn" id="signup-password-toggle" title="Toggle password visibility">
+                            <input type="password" id="signup-password" required placeholder="Min. 6 characters"
+                                autocomplete="new-password">
+                            <button type="button" class="password-toggle-btn" id="signup-password-toggle"
+                                title="Toggle password visibility">
                                 <i data-lucide="eye"></i>
                             </button>
                         </div>
@@ -191,9 +209,10 @@
                 <div class="logo-text-wrapper">
                     <span class="logo-title">CICR Inventory</span>
                 </div>
-                <span class="user-badge" id="nav-user-badge"><span class="online-indicator"></span> <span id="nav-username"></span></span>
+                <span class="user-badge" id="nav-user-badge"><span class="online-indicator"></span> <span
+                        id="nav-username"></span></span>
             </div>
-            
+
             <div class="nav-links">
                 <a class="nav-link active" id="nav-dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a>
                 <a class="nav-link" id="nav-inventory"><i data-lucide="layers"></i> Inventory</a>
@@ -231,7 +250,7 @@
                 <div class="orbit-ring ring-3"></div>
                 <div class="orbit-core-glow"></div>
             </div>
-            
+
             <div class="welcome-huge-text">
                 <span class="char-solid">C</span>
                 <span class="char-outline">I</span>
@@ -252,7 +271,8 @@
                 <span class="welcome-gradient-text">WITH CICR VAULT.</span>
             </h1>
             <p class="welcome-subtitle">
-                Your lab's entire hardware stock, live and searchable. Reserve what you need, return what you're done with.
+                Your lab's entire hardware stock, live and searchable. Reserve what you need, return what you're done
+                with.
             </p>
             <div class="welcome-actions">
                 <button class="welcome-btn-start" id="welcome-btn-enter">
@@ -283,10 +303,12 @@
 
             <div class="sidebar-scroll-content">
                 <!-- Notifications Button -->
-                <button class="sidebar-action-btn notif-sidebar-btn" id="sidebar-notifications-btn" title="Audit Telemetry & System Alerts">
+                <button class="sidebar-action-btn notif-sidebar-btn" id="sidebar-notifications-btn"
+                    title="Audit Telemetry & System Alerts">
                     <div class="btn-left-content">
                         <div class="notif-icon-frame">
-                            <svg class="notif-bell-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <svg class="notif-bell-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                             </svg>
@@ -297,17 +319,6 @@
                     <span class="badge notif-hud-badge" id="sidebar-notif-badge">5</span>
                 </button>
 
-                <!-- Command Palette Button -->
-                <button class="sidebar-action-btn" id="sidebar-command-btn" style="display: none !important;">
-                    <div class="btn-left-content">
-                        <i data-lucide="search" class="btn-icon"></i>
-                        <div class="btn-text-stack">
-                            <span class="btn-text-main">COMMAND PALETTE</span>
-                        </div>
-                    </div>
-                    <span class="shortcut-tag">Ctrl K</span>
-                </button>
-
                 <!-- Navigation Links Section -->
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
@@ -315,7 +326,8 @@
                         <i data-lucide="chevron-down" class="section-arrow"></i>
                     </div>
                     <div class="sidebar-nav-links">
-                        <a href="#" class="sidebar-nav-link active" id="side-nav-dashboard" data-target="dashboard-view">
+                        <a href="#" class="sidebar-nav-link active" id="side-nav-dashboard"
+                            data-target="dashboard-view">
                             <i data-lucide="layout-dashboard"></i>
                             <span>Dashboard</span>
                         </a>
@@ -323,10 +335,12 @@
                             <i data-lucide="layers"></i>
                             <span>Inventory</span>
                         </a>
-                        <a href="#" class="sidebar-nav-link" id="side-nav-admin" data-target="admin-view" style="display: none !important;">
+                        <a href="#" class="sidebar-nav-link" id="side-nav-admin" data-target="admin-view"
+                            style="display: none !important;">
                             <i data-lucide="shield-check"></i>
                             <span>Admin Portal</span>
-                            <span class="badge" id="admin-pending-badge" style="display: none; background: #ff007a; color: #ffffff; margin-left: auto; font-size: 7.5px; padding: 1px 5px; border-radius: 9999px; font-weight: 800;">0</span>
+                            <span class="badge" id="admin-pending-badge"
+                                style="display: none; background: #ff007a; color: #ffffff; margin-left: auto; font-size: 7.5px; padding: 1px 5px; border-radius: 9999px; font-weight: 800;">0</span>
                         </a>
 
                         <details class="vault-dropdown" open>
@@ -388,7 +402,8 @@
                     <span class="profile-name" id="profile-username-display">SRVKILLER09</span>
                     <span class="profile-role">ADMIN</span>
                 </div>
-                <button class="profile-key-btn" id="sidebar-reset-pass-btn" title="Reset / Change Password" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:6px; display:flex; align-items:center; border-radius:6px; transition:all 0.2s;">
+                <button class="profile-key-btn" id="sidebar-reset-pass-btn" title="Reset / Change Password"
+                    style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:6px; display:flex; align-items:center; border-radius:6px; transition:all 0.2s;">
                     <i data-lucide="key-round" style="width:14px; height:14px;"></i>
                 </button>
                 <button class="profile-logout-btn" id="sidebar-logout-btn" title="Logout">
@@ -401,575 +416,708 @@
 
         <!-- Right Main Viewport wrapper -->
         <div class="main-viewport-wrapper">
-             <!-- Viewport Header Bar -->
-             <header class="viewport-header">
-                 <div class="header-left">
-                     <button class="mobile-sidebar-toggle" id="mobile-sidebar-toggle" aria-label="Open navigation" aria-expanded="false">
-                         <i data-lucide="menu"></i>
-                         <span>Menu</span>
-                     </button>
-                     <div class="breadcrumbs">
-                         <span class="breadcrumb-root">HOME</span>
-                         <span class="breadcrumb-separator">/</span>
-                         <span class="breadcrumb-active" id="breadcrumb-current">DASHBOARD</span>
-                     </div>
-                 </div>
-                 
-                 <div class="header-right">
-                     <div class="header-search" id="header-search-box" style="display: none !important; cursor: pointer;" title="Search components or jump to page (Ctrl + K)">
-                         <i data-lucide="search" class="search-icon"></i>
-                         <input type="text" id="header-search-input" placeholder="Search components, jump to page..." readonly style="cursor: pointer;">
-                         <span class="search-kbd">Ctrl K</span>
-                     </div>
-                     <div class="header-theme-box">
-                         <i data-lucide="palette" class="header-theme-icon"></i>
-                         <select id="header-theme-select" title="Switch Theme">
-                             <option value="cyberpunk">Cyber Neon</option>
-                             <option value="light">Clean Light</option>
-                             <option value="sakura">Cherry Blossom</option>
-                         </select>
-                     </div>
-                 </div>
-             </header>
+            <!-- Viewport Header Bar -->
+            <header class="viewport-header">
+                <div class="header-left">
+                    <button class="mobile-sidebar-toggle" id="mobile-sidebar-toggle" aria-label="Open navigation"
+                        aria-expanded="false">
+                        <i data-lucide="menu"></i>
+                        <span>Menu</span>
+                    </button>
+                    <div class="breadcrumbs">
+                        <span class="breadcrumb-root">HOME</span>
+                        <span class="breadcrumb-separator">/</span>
+                        <span class="breadcrumb-active" id="breadcrumb-current">DASHBOARD</span>
+                    </div>
+                </div>
 
-             <!-- Main Content Area -->
-             <main class="main-content" id="app-main-content">
-                  <!-- sections: dashboard-view, inventory-view, projects-view, meetings-view, events-view -->
-                   <!-- Dashboard View -->
-                   <section class="dashboard-section active" id="dashboard-view">
-                       <!-- Greeting card -->
-                       <div class="dashboard-greeting-card glass">
-                           <div class="card-greetings-left">
-                               <span class="dashboard-subtitle-accent" id="dashboard-subtitle-role">ADMIN DASHBOARD</span>
-                               <h1 class="dashboard-greeting-title" id="dashboard-greeting">Good evening, Operator</h1>
-                               <p class="dashboard-greeting-desc">Here's what's happening across CICR Inventory right now.</p>
-                           </div>
+                <div class="header-right">
+                    <div class="header-theme-box">
+                        <i data-lucide="palette" class="header-theme-icon"></i>
+                        <select id="header-theme-select" title="Switch Theme">
+                            <option value="cyberpunk">Cyber Neon</option>
+                            <option value="light">Clean Light</option>
+                            <option value="sakura">Cherry Blossom</option>
+                        </select>
+                    </div>
+                </div>
+            </header>
 
-                            <div class="card-clock-right">
-                                <div class="clock-date" id="dashboard-date">Tuesday, 17 March 2026</div>
-                                <div class="clock-time" id="dashboard-clock">09:28:35 pm</div>
+            <!-- Main Content Area -->
+            <main class="main-content" id="app-main-content">
+                <!-- sections: dashboard-view, inventory-view, projects-view, meetings-view, events-view -->
+                <!-- Dashboard View -->
+                <section class="dashboard-section active" id="dashboard-view">
+                    <!-- Greeting card -->
+                    <div class="dashboard-greeting-card glass">
+                        <div class="card-greetings-left">
+                            <span class="dashboard-subtitle-accent" id="dashboard-subtitle-role">ADMIN DASHBOARD</span>
+                            <h1 class="dashboard-greeting-title" id="dashboard-greeting">Good evening, Operator</h1>
+                            <p class="dashboard-greeting-desc">Here's what's happening across CICR Inventory right now.
+                            </p>
+                        </div>
+
+                        <div class="card-clock-right">
+                            <div class="clock-date" id="dashboard-date">Tuesday, 17 March 2026</div>
+                            <div class="clock-time" id="dashboard-clock">09:28:35 pm</div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard grid cards -->
+                    <div class="dashboard-grid">
+                        <div class="dash-card card-blue" id="dash-card-vault">
+                            <div class="dash-card-header">
+                                <div class="dash-card-icon-wrapper">
+                                    <i data-lucide="layers"></i>
+                                </div>
+                                <span class="dash-card-tag">CATALOG</span>
                             </div>
-                       </div>
- 
-                       <!-- Dashboard grid cards -->
-                       <div class="dashboard-grid">
-                           <div class="dash-card card-blue" id="dash-card-vault">
-                               <div class="dash-card-header">
-                                   <div class="dash-card-icon-wrapper">
-                                       <i data-lucide="layers"></i>
-                                   </div>
-                                   <span class="dash-card-tag">CATALOG</span>
-                               </div>
-                               <div class="dash-card-body">
-                                   <h3 class="dash-card-title">Component Vault</h3>
-                                   <p class="dash-card-desc">Browse and search the repository of microcontrollers, sensors, actuators, and hardware components.</p>
-                               </div>
-                               <div class="dash-card-footer">
-                                   <i data-lucide="arrow-right"></i>
-                               </div>
-                           </div>
- 
-                           <div class="dash-card card-purple" id="dash-card-logs">
-                                <div class="dash-card-header">
-                                    <div class="dash-card-icon-wrapper">
-                                        <i data-lucide="clipboard-list"></i>
-                                    </div>
-                                    <span class="dash-card-tag">CHECKOUTS</span>
+                            <div class="dash-card-body">
+                                <h3 class="dash-card-title">Component Vault</h3>
+                                <p class="dash-card-desc">Browse and search the repository of microcontrollers, sensors,
+                                    actuators, and hardware components.</p>
+                            </div>
+                            <div class="dash-card-footer">
+                                <i data-lucide="arrow-right"></i>
+                            </div>
+                        </div>
+
+                        <div class="dash-card card-purple" id="dash-card-logs">
+                            <div class="dash-card-header">
+                                <div class="dash-card-icon-wrapper">
+                                    <i data-lucide="clipboard-list"></i>
                                 </div>
-                                <div class="dash-card-body">
-                                    <h3 class="dash-card-title">Active Logs</h3>
-                                    <p class="dash-card-desc">Track active checkouts, log due return dates, and review student usage permissions.</p>
+                                <span class="dash-card-tag">CHECKOUTS</span>
+                            </div>
+                            <div class="dash-card-body">
+                                <h3 class="dash-card-title">Active Logs</h3>
+                                <p class="dash-card-desc">Track active checkouts, log due return dates, and review
+                                    student usage permissions.</p>
+                            </div>
+                            <div class="dash-card-footer">
+                                <i data-lucide="arrow-right"></i>
+                            </div>
+                        </div>
+
+                        <div class="dash-card card-cyan" id="dash-card-devs">
+                            <div class="dash-card-header">
+                                <div class="dash-card-icon-wrapper">
+                                    <i data-lucide="code-2"></i>
                                 </div>
-                                <div class="dash-card-footer">
-                                    <i data-lucide="arrow-right"></i>
+                                <span class="dash-card-tag">CREATIVE TEAM</span>
+                            </div>
+                            <div class="dash-card-body">
+                                <h3 class="dash-card-title">Meet The Developers</h3>
+                                <p class="dash-card-desc">Meet the engineering minds and mentors behind the CICR
+                                    Robotics Vault.</p>
+                            </div>
+                            <div class="dash-card-footer">
+                                <i data-lucide="arrow-right"></i>
+                            </div>
+                        </div>
+
+                        <div class="dash-card card-pink" id="dash-card-admin" style="display: none !important;">
+                            <div class="dash-card-header">
+                                <div class="dash-card-icon-wrapper">
+                                    <i data-lucide="shield-check"></i>
+                                </div>
+                                <span class="dash-card-tag" id="dash-admin-badge-tag">ADMIN ACCESS</span>
+                            </div>
+                            <div class="dash-card-body">
+                                <h3 class="dash-card-title">Member Approvals</h3>
+                                <p class="dash-card-desc">Review pending registration requests, approve new accounts,
+                                    and configure member roles.</p>
+                            </div>
+                            <div class="dash-card-footer">
+                                <i data-lucide="arrow-right"></i>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- Slide 3: Pinterest Search Explorer Layout (3-Column Staggered Grid) -->
+                <section class="explorer-layout-section reveal" id="inventory-view" style="display: none;">
+                    <div class="explorer-layout-container">
+                        <!-- Column 2 & 3: Main Explorer Center -->
+                        <div class="explorer-main-area">
+                            <!-- Top Search Bar & Stats integration -->
+                            <div class="explorer-search-row">
+                                <div class="search-box-new">
+                                    <i data-lucide="search" class="search-icon"></i>
+                                    <input type="text" id="search-input"
+                                        placeholder="Search components, modules, tools...">
+                                    <button class="clear-search" id="clear-search" style="display: none;">
+                                        <i data-lucide="x"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Category tags in line (horizontal tags selector) -->
+                                <div class="horizontal-tags-selector">
+                                    <span class="tag-pill active" data-category="all">All</span>
+                                    <span class="tag-pill" data-category="microcontrollers">MCU</span>
+                                    <span class="tag-pill" data-category="sensors">Sensors</span>
+                                    <span class="tag-pill" data-category="actuators">Actuators</span>
+                                    <span class="tag-pill" data-category="power">Power</span>
+                                    <span class="tag-pill" data-category="tools">Tools</span>
                                 </div>
                             </div>
 
-                            <div class="dash-card card-cyan" id="dash-card-devs">
-                                <div class="dash-card-header">
-                                    <div class="dash-card-icon-wrapper">
-                                        <i data-lucide="code-2"></i>
+                            <!-- Quick Stats Panel inside Explorer Layout (Interactive Filter Bubbles) -->
+                            <div class="explorer-stats-row">
+                                <div class="stat-bubble-new" id="stat-filter-all" data-stock-filter="all"
+                                    title="Click to show all vaulted hardware">
+                                    <div class="stat-bubble-header">
+                                        <span class="bubble-label"><i data-lucide="boxes"></i> Total Vaulted</span>
+                                        <span class="stat-click-hint">ALL</span>
                                     </div>
-                                    <span class="dash-card-tag">CREATIVE TEAM</span>
+                                    <span class="bubble-value" id="stat-total">0</span>
                                 </div>
-                                <div class="dash-card-body">
-                                    <h3 class="dash-card-title">Meet The Developers</h3>
-                                    <p class="dash-card-desc">Meet the engineering minds and mentors behind the CICR Robotics Vault.</p>
+                                <div class="stat-bubble-new" id="stat-filter-borrowed" data-stock-filter="borrowed"
+                                    title="Click to show only items with active loans">
+                                    <div class="stat-bubble-header">
+                                        <span class="bubble-label"><i data-lucide="shopping-cart"></i> Active
+                                            Loans</span>
+                                        <span class="stat-click-hint">FILTER</span>
+                                    </div>
+                                    <span class="bubble-value text-purple" id="stat-borrowed">0</span>
                                 </div>
-                                <div class="dash-card-footer">
-                                    <i data-lucide="arrow-right"></i>
+                                <div class="stat-bubble-new" id="stat-filter-low" data-stock-filter="low"
+                                    title="Click to show only items with low reserves (≤ 2 units)">
+                                    <div class="stat-bubble-header">
+                                        <span class="bubble-label"><i data-lucide="alert-circle"></i> Low
+                                            Reserves</span>
+                                        <span class="stat-click-hint">FILTER</span>
+                                    </div>
+                                    <span class="bubble-value text-yellow" id="stat-low">0</span>
+                                </div>
+                                <div class="stat-bubble-new" id="stat-filter-out" data-stock-filter="out"
+                                    title="Click to show only out of stock items">
+                                    <div class="stat-bubble-header">
+                                        <span class="bubble-label"><i data-lucide="package-x"></i> Out of Stock</span>
+                                        <span class="stat-click-hint">FILTER</span>
+                                    </div>
+                                    <span class="bubble-value text-pink" id="stat-out">0</span>
                                 </div>
                             </div>
 
-                            <div class="dash-card card-pink" id="dash-card-admin" style="display: none !important;">
-                                <div class="dash-card-header">
-                                    <div class="dash-card-icon-wrapper">
-                                        <i data-lucide="shield-check"></i>
+                            <!-- Dynamic Items Grid -->
+                            <div class="explorer-grid-container">
+                                <div class="section-title-bar">
+                                    <div class="title-bar-left">
+                                        <h2>Vault Catalog</h2>
+                                        <span class="items-count-badge" id="results-count">Showing 0 items</span>
+                                        <span class="active-stock-pill" id="active-stock-pill"
+                                            style="display: none;"></span>
                                     </div>
-                                    <span class="dash-card-tag" id="dash-admin-badge-tag">ADMIN ACCESS</span>
+                                    <button class="btn-add-inventory-cyber" id="btn-inventory-add-item"
+                                        style="display: none !important;">
+                                        <i data-lucide="plus-circle"></i> Add Component
+                                    </button>
                                 </div>
-                                <div class="dash-card-body">
-                                    <h3 class="dash-card-title">Member Approvals</h3>
-                                    <p class="dash-card-desc">Review pending registration requests, approve new accounts, and configure member roles.</p>
+
+                                <!-- No Results State -->
+                                <div class="no-results glass" id="no-results" style="display: none;">
+                                    <i data-lucide="package-search"></i>
+                                    <h3>No items found</h3>
+                                    <p>Try adjusting your search keywords or sidebar filters.</p>
                                 </div>
-                                <div class="dash-card-footer">
-                                    <i data-lucide="arrow-right"></i>
+
+                                <div class="inventory-grid" id="inventory-grid">
+                                    <!-- Cards will be dynamically injected by JavaScript -->
                                 </div>
                             </div>
- 
-                       </div>
-                   </section>
+                        </div>
+                    </div>
+                </section>
 
-                   <!-- Slide 3: Pinterest Search Explorer Layout (3-Column Staggered Grid) -->
-                   <section class="explorer-layout-section reveal" id="inventory-view" style="display: none;">
-                       <div class="explorer-layout-container">
-                           <!-- Column 2 & 3: Main Explorer Center -->
-                           <div class="explorer-main-area">
-                               <!-- Top Search Bar & Stats integration -->
-                               <div class="explorer-search-row">
-                                   <div class="search-box-new">
-                                       <i data-lucide="search" class="search-icon"></i>
-                                       <input type="text" id="search-input" placeholder="Search components, modules, tools...">
-                                       <button class="clear-search" id="clear-search" style="display: none;">
-                                           <i data-lucide="x"></i>
-                                       </button>
-                                   </div>
-                                   
-                                   <!-- Category tags in line (horizontal tags selector) -->
-                                   <div class="horizontal-tags-selector">
-                                       <span class="tag-pill active" data-category="all">All</span>
-                                       <span class="tag-pill" data-category="microcontrollers">MCU</span>
-                                       <span class="tag-pill" data-category="sensors">Sensors</span>
-                                       <span class="tag-pill" data-category="actuators">Actuators</span>
-                                       <span class="tag-pill" data-category="power">Power</span>
-                                       <span class="tag-pill" data-category="tools">Tools</span>
-                                   </div>
-                               </div>
+                <!-- Section: Meet The Developers & Under The Guidance of -->
+                <section class="developers-section reveal" id="developers-view" style="display: none;">
+                    <!-- 1. Under The Guidance of Section -->
+                    <div class="devs-clean-section">
+                        <h2 class="devs-clean-heading">Under The Guidance of</h2>
 
-                                <!-- Quick Stats Panel inside Explorer Layout (Interactive Filter Bubbles) -->
-                                <div class="explorer-stats-row">
-                                    <div class="stat-bubble-new" id="stat-filter-all" data-stock-filter="all" title="Click to show all vaulted hardware">
-                                        <div class="stat-bubble-header">
-                                            <span class="bubble-label"><i data-lucide="boxes"></i> Total Vaulted</span>
-                                            <span class="stat-click-hint">ALL</span>
-                                        </div>
-                                        <span class="bubble-value" id="stat-total">0</span>
-                                    </div>
-                                    <div class="stat-bubble-new" id="stat-filter-borrowed" data-stock-filter="borrowed" title="Click to show only items with active loans">
-                                        <div class="stat-bubble-header">
-                                            <span class="bubble-label"><i data-lucide="shopping-cart"></i> Active Loans</span>
-                                            <span class="stat-click-hint">FILTER</span>
-                                        </div>
-                                        <span class="bubble-value text-purple" id="stat-borrowed">0</span>
-                                    </div>
-                                    <div class="stat-bubble-new" id="stat-filter-low" data-stock-filter="low" title="Click to show only items with low reserves (≤ 2 units)">
-                                        <div class="stat-bubble-header">
-                                            <span class="bubble-label"><i data-lucide="alert-circle"></i> Low Reserves</span>
-                                            <span class="stat-click-hint">FILTER</span>
-                                        </div>
-                                        <span class="bubble-value text-yellow" id="stat-low">0</span>
-                                    </div>
-                                    <div class="stat-bubble-new" id="stat-filter-out" data-stock-filter="out" title="Click to show only out of stock items">
-                                        <div class="stat-bubble-header">
-                                            <span class="bubble-label"><i data-lucide="package-x"></i> Out of Stock</span>
-                                            <span class="stat-click-hint">FILTER</span>
-                                        </div>
-                                        <span class="bubble-value text-pink" id="stat-out">0</span>
+                        <div class="mentors-clean-container">
+                            <!-- Mentor 1: Gunjan Pal -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-cyan"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-cyan"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/gunjan.jpg" alt="Gunjan Pal" class="dev-avatar-img"
+                                            style="object-position: center 20%;">
                                     </div>
                                 </div>
-
-                               <!-- Dynamic Items Grid -->
-                               <div class="explorer-grid-container">
-                                    <div class="section-title-bar">
-                                        <div class="title-bar-left">
-                                            <h2>Vault Catalog</h2>
-                                            <span class="items-count-badge" id="results-count">Showing 0 items</span>
-                                            <span class="active-stock-pill" id="active-stock-pill" style="display: none;"></span>
-                                        </div>
-                                        <button class="btn-add-inventory-cyber" id="btn-inventory-add-item" style="display: none !important;">
-                                            <i data-lucide="plus-circle"></i> Add Component
-                                        </button>
-                                    </div>
-                                   
-                                   <!-- No Results State -->
-                                   <div class="no-results glass" id="no-results" style="display: none;">
-                                       <i data-lucide="package-search"></i>
-                                       <h3>No items found</h3>
-                                       <p>Try adjusting your search keywords or sidebar filters.</p>
-                                   </div>
-
-                                   <div class="inventory-grid" id="inventory-grid">
-                                       <!-- Cards will be dynamically injected by JavaScript -->
-                                   </div>
-                               </div>
-                           </div>
-                       </div>
-                   </section>
-
-                   <!-- Section: Meet The Developers & Under The Guidance of -->
-                   <section class="developers-section reveal" id="developers-view" style="display: none;">
-                       <!-- 1. Under The Guidance of Section -->
-                       <div class="devs-clean-section">
-                           <h2 class="devs-clean-heading">Under The Guidance of</h2>
-                           
-                            <div class="mentors-clean-container">
-                                <!-- Mentor 1: Gunjan Pal -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-cyan"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-cyan"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/gunjan.jpg" alt="Gunjan Pal" class="dev-avatar-img" style="object-position: center 20%;">
-                                        </div>
-                                    </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Gunjan Pal</h3>
-                                        <span class="dev-role-badge badge-lead">Management Head</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/gunjan-pal-796093284/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Gunjan Pal LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/Gunjan00001" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Gunjan Pal GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Gunjan Pal</h3>
+                                    <span class="dev-role-badge badge-lead">Core Team</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/gunjan-pal-796093284/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Gunjan Pal LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/Gunjan00001" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Gunjan Pal GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Mentor 2: Aryan Varshney (Center) -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-gold"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-gold"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/aryan.png" alt="Aryan Varshney" class="dev-avatar-img" style="object-position: center 20%;">
-                                        </div>
-                                    </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Aryan Varshney</h3>
-                                        <span class="dev-role-badge badge-coordinator">COORDINATOR</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/aryan-varshney-392446310/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Aryan Varshney LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/AryanV-Coder" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Aryan Varshney GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
+                            <!-- Mentor 2: Aryan Varshney (Center) -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-gold"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-gold"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/aryan.png" alt="Aryan Varshney" class="dev-avatar-img"
+                                            style="object-position: center 20%;">
                                     </div>
                                 </div>
-
-                                <!-- Mentor 3: Dhruvi Gupta -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-purple"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-purple"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/dhruvi.png" alt="Dhruvi Gupta" class="dev-avatar-img" style="object-position: center 16%;">
-                                        </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Aryan Varshney</h3>
+                                    <span class="dev-role-badge badge-coordinator">COORDINATOR</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/aryan-varshney-392446310/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Aryan Varshney LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/AryanV-Coder" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Aryan Varshney GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
                                     </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Dhruvi Gupta</h3>
-                                        <span class="dev-role-badge badge-lead">Management Head</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/dhruvi-guptadg/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Dhruvi Gupta LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                        </div>
+                                </div>
+                            </div>
+
+                            <!-- Mentor 3: Dhruvi Gupta -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-purple"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-purple"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/dhruvi.png" alt="Dhruvi Gupta" class="dev-avatar-img"
+                                            style="object-position: center 16%;">
+                                    </div>
+                                </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Dhruvi Gupta</h3>
+                                    <span class="dev-role-badge badge-lead">Management Head</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/dhruvi-guptadg/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Dhruvi Gupta LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Sleek Cyber Divider -->
-                        <div class="devs-clean-divider"></div>
+                    <!-- Sleek Cyber Divider -->
+                    <div class="devs-clean-divider"></div>
 
-                        <!-- 2. Meet The Developers Section -->
-                        <div class="devs-clean-section">
-                            <h2 class="devs-clean-heading">Meet The Developers</h2>
-                            
-                            <div class="devs-clean-container">
-                                <!-- Developer 1: Vardaan Saxena -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-cyan"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-cyan"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/vardaan.jpg" alt="Vardaan Saxena" class="dev-avatar-img" style="object-position: center 24%;">
-                                        </div>
-                                    </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Vardaan Saxena</h3>
-                                        <span class="dev-role-badge badge-frontend">Frontend + Integration</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/vardaan-saxena-b4b4a4365/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Vardaan Saxena LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/simplyvardaan/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Vardaan Saxena GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
+                    <!-- 2. Meet The Developers Section -->
+                    <div class="devs-clean-section">
+                        <h2 class="devs-clean-heading">Meet The Developers</h2>
+
+                        <div class="devs-clean-container">
+                            <!-- Developer 1: Vardaan Saxena -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-cyan"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-cyan"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/vardaan.jpg" alt="Vardaan Saxena" class="dev-avatar-img"
+                                            style="object-position: center 24%;">
                                     </div>
                                 </div>
-
-                                <!-- Developer 2: Kushagra Garg -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-purple"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-purple"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/kushagra.png" alt="Kushagra Garg" class="dev-avatar-img" style="object-position: center 8%;">
-                                        </div>
-                                    </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Kushagra Garg</h3>
-                                        <span class="dev-role-badge badge-backend">Backend</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/kushagra-garg-10bab5377/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Kushagra Garg LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/Sun-fire-nikka" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Kushagra Garg GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Developer 3: Mahak Katahara -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-green"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-green"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/mahak.png" alt="Mahak Katahara" class="dev-avatar-img" style="object-position: center 18%;">
-                                        </div>
-                                    </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Mahak Katahara</h3>
-                                        <span class="dev-role-badge badge-contributor">Contributor</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/mahak-katahara-947122389/" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Mahak Katahara LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/mahakkatahara" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Mahak Katahara GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Vardaan Saxena</h3>
+                                    <span class="dev-role-badge badge-frontend">Frontend + Integration</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/vardaan-saxena-b4b4a4365/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Vardaan Saxena LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/simplyvardaan/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Vardaan Saxena GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Developer 4: Divyam Jain -->
-                                <div class="dev-profile-box glass">
-                                    <div class="box-glow-aura aura-pink"></div>
-                                    <div class="photo-placeholder-frame">
-                                        <div class="photo-glow-ring ring-pink"></div>
-                                        <div class="photo-placeholder-content">
-                                            <img src="/devs/divyam.png" alt="Divyam Jain" class="dev-avatar-img" style="object-position: center 15%;">
-                                        </div>
+                            <!-- Developer 2: Kushagra Garg -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-purple"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-purple"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/kushagra.png" alt="Kushagra Garg" class="dev-avatar-img"
+                                            style="object-position: center 8%;">
                                     </div>
-                                    <div class="dev-card-text">
-                                        <h3 class="dev-person-name">Divyam Jain</h3>
-                                        <span class="dev-role-badge badge-tester">Beta Tester</span>
-                                        <div class="dev-social-links">
-                                            <a href="https://www.linkedin.com/in/divyamjain8108" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-linkedin" title="Divyam Jain LinkedIn">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                            </a>
-                                            <a href="https://github.com/DJByteForge" target="_blank" rel="noopener noreferrer" class="dev-social-btn btn-github" title="Divyam Jain GitHub">
-                                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                                            </a>
-                                        </div>
+                                </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Kushagra Garg</h3>
+                                    <span class="dev-role-badge badge-backend">Backend</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/kushagra-garg-10bab5377/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Kushagra Garg LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/Sun-fire-nikka" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Kushagra Garg GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Developer 3: Mahak Katahara -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-green"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-green"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/mahak.png" alt="Mahak Katahara" class="dev-avatar-img"
+                                            style="object-position: center 18%;">
+                                    </div>
+                                </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Mahak Katahara</h3>
+                                    <span class="dev-role-badge badge-contributor">Contributor</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/mahak-katahara-947122389/" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Mahak Katahara LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/mahakkatahara" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Mahak Katahara GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Developer 4: Divyam Jain -->
+                            <div class="dev-profile-box glass">
+                                <div class="box-glow-aura aura-pink"></div>
+                                <div class="photo-placeholder-frame">
+                                    <div class="photo-glow-ring ring-pink"></div>
+                                    <div class="photo-placeholder-content">
+                                        <img src="/devs/divyam.png" alt="Divyam Jain" class="dev-avatar-img"
+                                            style="object-position: center 15%;">
+                                    </div>
+                                </div>
+                                <div class="dev-card-text">
+                                    <h3 class="dev-person-name">Divyam Jain</h3>
+                                    <span class="dev-role-badge badge-tester">Beta Tester</span>
+                                    <div class="dev-social-links">
+                                        <a href="https://www.linkedin.com/in/divyamjain8108" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-linkedin"
+                                            title="Divyam Jain LinkedIn">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                                </path>
+                                                <rect x="2" y="9" width="4" height="12"></rect>
+                                                <circle cx="4" cy="4" r="2"></circle>
+                                            </svg>
+                                        </a>
+                                        <a href="https://github.com/DJByteForge" target="_blank"
+                                            rel="noopener noreferrer" class="dev-social-btn btn-github"
+                                            title="Divyam Jain GitHub">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path
+                                                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4">
+                                                </path>
+                                                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+                                            </svg>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                   </section>
+                    </div>
+                </section>
 
-                    <!-- Section: Admin Management & Member Approvals -->
-                    <section class="admin-layout-section reveal" id="admin-view" style="display: none !important;">
-                        <div class="admin-panel-container">
-                            <!-- Admin Banner Header -->
-                            <div class="admin-header-card glass">
-                                <div class="admin-header-left">
-                                    <div class="admin-shield-icon">
-                                        <i data-lucide="shield-check"></i>
-                                    </div>
-                                    <div>
-                                        <span class="admin-header-tag">ADMIN CONTROL CENTER</span>
-                                        <h2 class="admin-header-title">Admin Management & Issue Approvals</h2>
-                                        <p class="admin-header-desc">Review component issue requests, manage member approvals, and monitor vault telemetry.</p>
-                                    </div>
+                <!-- Section: Admin Management & Member Approvals -->
+                <section class="admin-layout-section reveal" id="admin-view" style="display: none !important;">
+                    <div class="admin-panel-container">
+                        <!-- Admin Banner Header -->
+                        <div class="admin-header-card glass">
+                            <div class="admin-header-left">
+                                <div class="admin-shield-icon">
+                                    <i data-lucide="shield-check"></i>
                                 </div>
-                                <div class="admin-header-stats">
-                                    <div class="admin-stat-box stat-purple">
-                                        <span class="admin-stat-num" id="admin-stat-hw-pending">0</span>
-                                        <span class="admin-stat-lbl">Hardware Requests</span>
+                                <div>
+                                    <span class="admin-header-tag">ADMIN CONTROL CENTER</span>
+                                    <h2 class="admin-header-title">Admin Management & Issue Approvals</h2>
+                                    <p class="admin-header-desc">Review component issue requests, manage member
+                                        approvals, and monitor vault telemetry.</p>
+                                </div>
+                            </div>
+                            <div class="admin-header-stats">
+                                <div class="admin-stat-box stat-purple">
+                                    <span class="admin-stat-num" id="admin-stat-hw-pending">0</span>
+                                    <span class="admin-stat-lbl">Hardware Requests</span>
+                                </div>
+                                <div class="admin-stat-box stat-pink">
+                                    <span class="admin-stat-num" id="admin-stat-pending">0</span>
+                                    <span class="admin-stat-lbl">Account Approvals</span>
+                                </div>
+                                <div class="admin-stat-box stat-green">
+                                    <span class="admin-stat-num" id="admin-stat-approved">0</span>
+                                    <span class="admin-stat-lbl">Approved Members</span>
+                                </div>
+                                <div class="admin-stat-box stat-cyan">
+                                    <span class="admin-stat-num" id="admin-stat-admins">0</span>
+                                    <span class="admin-stat-lbl">Admins</span>
+                                </div>
+                                <div class="admin-stat-box stat-yellow">
+                                    <span class="admin-stat-num" id="admin-stat-total-logs">0</span>
+                                    <span class="admin-stat-lbl">System Logs</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Queues Dual Column Grid -->
+                        <div class="admin-queues-split-grid">
+                            <!-- Hardware Issue Requests Queue -->
+                            <div class="admin-block-card glass" id="admin-hardware-requests-block">
+                                <div class="admin-block-header">
+                                    <div class="admin-block-title-wrap">
+                                        <i data-lucide="cpu" class="text-cyan"></i>
+                                        <h3>Hardware Issue Requests</h3>
+                                        <span class="admin-badge-count count-cyan" id="admin-hw-count-tag">0
+                                            PENDING</span>
                                     </div>
-                                    <div class="admin-stat-box stat-pink">
-                                        <span class="admin-stat-num" id="admin-stat-pending">0</span>
-                                        <span class="admin-stat-lbl">Account Approvals</span>
-                                    </div>
-                                    <div class="admin-stat-box stat-green">
-                                        <span class="admin-stat-num" id="admin-stat-approved">0</span>
-                                        <span class="admin-stat-lbl">Approved Members</span>
-                                    </div>
-                                    <div class="admin-stat-box stat-cyan">
-                                        <span class="admin-stat-num" id="admin-stat-admins">0</span>
-                                        <span class="admin-stat-lbl">Admins</span>
-                                    </div>
-                                    <div class="admin-stat-box stat-yellow">
-                                        <span class="admin-stat-num" id="admin-stat-total-logs">0</span>
-                                        <span class="admin-stat-lbl">System Logs</span>
+                                    <button class="btn btn-secondary btn-sm admin-btn-action" id="admin-hw-refresh-btn"
+                                        title="Refresh Requests">
+                                        <i data-lucide="refresh-cw"></i> Refresh
+                                    </button>
+                                </div>
+
+                                <div class="admin-queue-list hardware-requests-grid" id="admin-hardware-list">
+                                    <!-- Dynamic hardware requests injected here -->
+                                    <div class="admin-empty-state">
+                                        <i data-lucide="package-check"></i>
+                                        <p>No pending component requests in queue. Vault operations nominal.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Queues Dual Column Grid -->
-                            <div class="admin-queues-split-grid">
-                                <!-- Hardware Issue Requests Queue -->
-                                <div class="admin-block-card glass" id="admin-hardware-requests-block">
-                                    <div class="admin-block-header">
-                                        <div class="admin-block-title-wrap">
-                                            <i data-lucide="cpu" class="text-cyan"></i>
-                                            <h3>Hardware Issue Requests</h3>
-                                            <span class="admin-badge-count count-cyan" id="admin-hw-count-tag">0 PENDING</span>
-                                        </div>
-                                        <button class="btn btn-secondary btn-sm admin-btn-action" id="admin-hw-refresh-btn" title="Refresh Requests">
-                                            <i data-lucide="refresh-cw"></i> Refresh
-                                        </button>
-                                    </div>
-
-                                    <div class="admin-queue-list hardware-requests-grid" id="admin-hardware-list">
-                                        <!-- Dynamic hardware requests injected here -->
-                                        <div class="admin-empty-state">
-                                            <i data-lucide="package-check"></i>
-                                            <p>No pending component requests in queue. Vault operations nominal.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Pending Member Approvals Section -->
-                                <div class="admin-block-card glass">
-                                    <div class="admin-block-header">
-                                        <div class="admin-block-title-wrap">
-                                            <i data-lucide="user-check" class="text-pink"></i>
-                                            <h3>Member Registrations</h3>
-                                            <span class="admin-badge-count" id="admin-pending-count-tag">0 PENDING</span>
-                                        </div>
-                                        <button class="btn btn-secondary btn-sm admin-btn-action" id="admin-refresh-btn" title="Refresh User List">
-                                            <i data-lucide="refresh-cw"></i> Refresh
-                                        </button>
-                                    </div>
-
-                                    <div class="admin-queue-list" id="admin-pending-list">
-                                        <!-- Dynamic pending items injected here -->
-                                        <div class="admin-empty-state">
-                                            <i data-lucide="check-circle-2"></i>
-                                            <p>No pending registration requests. All members reviewed!</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- All Users & Roles Directory -->
+                            <!-- Pending Member Approvals Section -->
                             <div class="admin-block-card glass">
                                 <div class="admin-block-header">
                                     <div class="admin-block-title-wrap">
-                                        <i data-lucide="users" class="text-cyan"></i>
-                                        <h3>Registered Users Directory</h3>
+                                        <i data-lucide="user-check" class="text-pink"></i>
+                                        <h3>Member Registrations</h3>
+                                        <span class="admin-badge-count" id="admin-pending-count-tag">0 PENDING</span>
                                     </div>
-                                    <div class="admin-search-wrapper">
-                                        <i data-lucide="search"></i>
-                                        <input type="text" id="admin-users-search" placeholder="Search user by name or email...">
-                                    </div>
+                                    <button class="btn btn-secondary btn-sm admin-btn-action" id="admin-refresh-btn"
+                                        title="Refresh User List">
+                                        <i data-lucide="refresh-cw"></i> Refresh
+                                    </button>
                                 </div>
 
-                                <div class="admin-table-responsive">
-                                    <table class="admin-users-table">
-                                        <thead>
-                                            <tr>
-                                                <th>User</th>
-                                                <th>Email</th>
-                                                <th>Approval Status</th>
-                                                <th>Role</th>
-                                                <th>Registered</th>
-                                                <th style="text-align: right;">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="admin-users-tbody">
-                                            <!-- Dynamic table rows injected here -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                            <!-- System Audit & Activity Logs Section -->
-                            <div class="admin-block-card glass" id="admin-audit-section">
-                                <div class="admin-block-header admin-audit-header-wrap">
-                                    <div class="admin-block-title-wrap">
-                                        <i data-lucide="activity" class="text-cyan"></i>
-                                        <h3>System Audit & Activity Logs</h3>
-                                        <span class="admin-badge-count count-cyan" id="admin-audit-count-tag">0 EVENTS</span>
-                                    </div>
-                                    <div class="admin-audit-controls">
-                                        <div class="admin-audit-filter-pills" id="admin-audit-pills">
-                                            <button class="audit-pill active" data-audit-cat="all">ALL</button>
-                                            <button class="audit-pill" data-audit-cat="auth">AUTH</button>
-                                            <button class="audit-pill" data-audit-cat="inventory">INVENTORY</button>
-                                            <button class="audit-pill" data-audit-cat="hardware">HARDWARE</button>
-                                            <button class="audit-pill" data-audit-cat="loans">LOANS</button>
-                                        </div>
-                                        <div class="admin-search-wrapper admin-audit-search-wrap">
-                                            <i data-lucide="search"></i>
-                                            <input type="text" id="admin-audit-search" placeholder="Search audit logs...">
-                                        </div>
-                                        <button class="btn btn-secondary btn-sm admin-btn-action" id="admin-audit-refresh-btn" title="Refresh Audit Logs">
-                                            <i data-lucide="refresh-cw"></i> Refresh
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="admin-audit-stream-container" id="admin-audit-stream">
+                                <div class="admin-queue-list" id="admin-pending-list">
+                                    <!-- Dynamic pending items injected here -->
                                     <div class="admin-empty-state">
-                                        <i data-lucide="shield"></i>
-                                        <p>Loading real-time audit ledger...</p>
+                                        <i data-lucide="check-circle-2"></i>
+                                        <p>No pending registration requests. All members reviewed!</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </section>
 
-             </main>
+                        <!-- All Users & Roles Directory -->
+                        <div class="admin-block-card glass">
+                            <div class="admin-block-header">
+                                <div class="admin-block-title-wrap">
+                                    <i data-lucide="users" class="text-cyan"></i>
+                                    <h3>Registered Users Directory</h3>
+                                    <span class="admin-badge-count count-cyan" id="admin-users-total-badge">0 USERS</span>
+                                </div>
+                                <div class="admin-audit-controls admin-users-controls">
+                                    <div class="admin-audit-filter-pills" id="admin-users-role-pills">
+                                        <button class="audit-pill active" data-user-filter="all" id="pill-filter-all">ALL</button>
+                                        <button class="audit-pill" data-user-filter="admin" id="pill-filter-admin">ADMINISTRATORS</button>
+                                        <button class="audit-pill" data-user-filter="member" id="pill-filter-member">MEMBERS</button>
+                                    </div>
+                                    <div class="admin-search-wrapper admin-users-search-wrap">
+                                        <i data-lucide="search"></i>
+                                        <input type="text" id="admin-users-search"
+                                            placeholder="Search user by name or email...">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="admin-table-responsive">
+                                <table class="admin-users-table">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Email</th>
+                                            <th>Approval Status</th>
+                                            <th>Role</th>
+                                            <th>Registered</th>
+                                            <th style="text-align: right;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-users-tbody">
+                                        <!-- Dynamic table rows injected here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- System Audit & Activity Logs Section -->
+                        <div class="admin-block-card glass" id="admin-audit-section">
+                            <div class="admin-block-header admin-audit-header-wrap">
+                                <div class="admin-block-title-wrap">
+                                    <i data-lucide="activity" class="text-cyan"></i>
+                                    <h3>System Audit & Activity Logs</h3>
+                                    <span class="admin-badge-count count-cyan" id="admin-audit-count-tag">0
+                                        EVENTS</span>
+                                </div>
+                                <div class="admin-audit-controls">
+                                    <div class="admin-audit-filter-pills" id="admin-audit-pills">
+                                        <button class="audit-pill active" data-audit-cat="all">ALL</button>
+                                        <button class="audit-pill" data-audit-cat="auth">AUTH</button>
+                                        <button class="audit-pill" data-audit-cat="inventory">INVENTORY</button>
+                                        <button class="audit-pill" data-audit-cat="hardware">HARDWARE</button>
+                                        <button class="audit-pill" data-audit-cat="loans">LOANS</button>
+                                    </div>
+                                    <div class="admin-search-wrapper admin-audit-search-wrap">
+                                        <i data-lucide="search"></i>
+                                        <input type="text" id="admin-audit-search" placeholder="Search audit logs...">
+                                    </div>
+                                    <button class="btn btn-secondary btn-sm admin-btn-action"
+                                        id="admin-audit-refresh-btn" title="Refresh Audit Logs">
+                                        <i data-lucide="refresh-cw"></i> Refresh
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="admin-audit-stream-container" id="admin-audit-stream">
+                                <div class="admin-empty-state">
+                                    <i data-lucide="shield"></i>
+                                    <p>Loading real-time audit ledger...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
         </div>
     </div>
 
     <!-- Modals Section -->
 
 
-    
-    <!-- Command Palette / Universal Search Modal -->
-    <div class="modal-overlay command-palette-overlay" id="command-palette-modal">
-        <div class="command-palette-container glass">
-            <div class="command-palette-search-bar">
-                <i data-lucide="search" class="command-palette-search-icon"></i>
-                <input type="text" id="command-palette-input" placeholder="Search any component, page, or action..." autocomplete="off" spellcheck="false">
-                <span class="command-palette-esc-hint">ESC</span>
-                <button class="command-palette-close-btn" id="command-palette-close" title="Close"><i data-lucide="x"></i></button>
-            </div>
-            <div class="command-palette-content" id="command-palette-results">
-                <!-- Injected via CommandPaletteManager -->
-            </div>
-            <div class="command-palette-footer">
-                <div class="command-footer-hints">
-                    <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Navigate</span>
-                    <span><kbd>&crarr;</kbd> Select</span>
-                    <span><kbd>ESC</kbd> Close</span>
-                </div>
-                <div class="command-footer-brand">
-                    <span>CICR COMMAND SYSTEM</span>
-                </div>
-            </div>
-        </div>
-    </div>
+
+
 
     <!-- Item Detail Modal -->
     <div class="modal-overlay" id="detail-modal">
@@ -980,7 +1128,7 @@
                 <h2 id="detail-name">Component Name</h2>
                 <div class="modal-status-badge" id="detail-status">Available</div>
             </div>
-            
+
             <div class="modal-body">
                 <div class="info-grid">
                     <div class="info-item">
@@ -998,12 +1146,12 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="details-section">
                     <h3>Specifications & Details</h3>
                     <p id="detail-specs">No specifications provided.</p>
                 </div>
-                
+
                 <div class="borrow-status-panel" id="borrowers-panel" style="display: none;">
                     <h3>Currently Checked Out By</h3>
                     <div class="borrowers-list" id="borrowers-list">
@@ -1011,7 +1159,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="modal-footer">
                 <button class="btn btn-danger btn-modal-delete" id="btn-modal-delete-item" style="display: none;">
                     <i data-lucide="trash-2"></i> Delete Item
@@ -1031,9 +1179,12 @@
         <div class="modal-content glass small-modal">
             <button class="close-modal" id="close-delete-confirm"><i data-lucide="x"></i></button>
             <div class="modal-header">
-                <div class="modal-category-badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">DANGER ACTION</div>
+                <div class="modal-category-badge"
+                    style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
+                    DANGER ACTION</div>
                 <h2 id="delete-confirm-title" style="color: #ffffff; margin-top: 6px;">Delete Component?</h2>
-                <p id="delete-confirm-subtitle" style="color: #94a3b8; font-size: 13px; margin-top: 6px;">This action will permanently purge the item from Supabase and notify all administrators.</p>
+                <p id="delete-confirm-subtitle" style="color: #94a3b8; font-size: 13px; margin-top: 6px;">This action
+                    will permanently purge the item from Supabase and notify all administrators.</p>
             </div>
             <div class="modal-body" style="padding: 12px 0;">
                 <div class="delete-warning-box">
@@ -1041,20 +1192,25 @@
                         <i data-lucide="alert-triangle"></i>
                     </div>
                     <div class="delete-warning-text">
-                        <strong id="delete-item-target-name" style="color: #ffffff; font-size: 14px; display: block;">Component Name</strong>
-                        <span style="font-size: 12px; color: #94a3b8; line-height: 1.4; display: block; margin-top: 4px;">The item record will be deleted from the database. A telemetry alert will be dispatched to superadmins.</span>
+                        <strong id="delete-item-target-name"
+                            style="color: #ffffff; font-size: 14px; display: block;">Component Name</strong>
+                        <span
+                            style="font-size: 12px; color: #94a3b8; line-height: 1.4; display: block; margin-top: 4px;">The
+                            item record will be deleted from the database. A telemetry alert will be dispatched to
+                            superadmins.</span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer" style="justify-content: flex-end; gap: 10px; margin-top: 16px;">
                 <button class="btn btn-secondary" id="btn-cancel-delete">Cancel</button>
-                <button class="btn btn-danger" id="btn-confirm-delete" style="background: #ef4444; color: #ffffff; border: 1px solid #f87171;">
+                <button class="btn btn-danger" id="btn-confirm-delete"
+                    style="background: #ef4444; color: #ffffff; border: 1px solid #f87171;">
                     <i data-lucide="trash-2"></i> Confirm Delete
                 </button>
             </div>
         </div>
     </div>
-    
+
     <!-- Borrow Form Modal -->
     <div class="modal-overlay" id="borrow-form-modal">
         <div class="modal-content glass small-modal">
@@ -1119,7 +1275,9 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="item-qty">Total Quantity * <span style="font-size: 10px; color: var(--text-dim); font-weight: normal;">(Max: 500)</span></label>
+                        <label for="item-qty">Total Quantity * <span
+                                style="font-size: 10px; color: var(--text-dim); font-weight: normal;">(Max:
+                                500)</span></label>
                         <input type="number" id="item-qty" min="1" max="500" required placeholder="e.g. 10">
                     </div>
                     <div class="form-group">
@@ -1129,7 +1287,8 @@
                 </div>
                 <div class="form-group">
                     <label for="item-specs">Specifications & Description</label>
-                    <textarea id="item-specs" rows="3" placeholder="Enter key features, pinout, voltage requirements, or other guidelines..."></textarea>
+                    <textarea id="item-specs" rows="3"
+                        placeholder="Enter key features, pinout, voltage requirements, or other guidelines..."></textarea>
                 </div>
                 <div class="form-group">
                     <label for="item-tags">Search Tags (comma-separated)</label>
@@ -1145,17 +1304,58 @@
         </div>
     </div>
 
-    <!-- History / Logs Drawer -->
+    <!-- History / Logs & Notifications Drawer -->
     <div class="modal-overlay" id="logs-drawer">
-        <div class="modal-content glass drawer">
-            <button class="close-modal"><i data-lucide="x"></i></button>
-            <div class="modal-header">
-                <h2>Inventory logs & transactions</h2>
-                <p>History of checkouts, returns, and inventory updates</p>
+        <div class="modal-content glass drawer notif-drawer">
+            <button class="close-modal" id="close-logs-drawer"><i data-lucide="x"></i></button>
+            <div class="modal-header notif-drawer-header">
+                <div class="notif-header-title-row">
+                    <div class="notif-header-icon-box">
+                        <svg class="notif-header-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span class="notif-header-beacon"></span>
+                    </div>
+                    <div>
+                        <h2>Notifications & Telemetry</h2>
+                        <p id="notif-drawer-subtitle">Operational alerts, loan schedules & system updates</p>
+                    </div>
+                </div>
+                <div class="notif-role-badge" id="notif-drawer-role-badge">
+                    <span class="role-dot" id="notif-role-dot"></span>
+                    <span id="notif-role-text">ADMIN TELEMETRY</span>
+                </div>
             </div>
-            <div class="logs-body">
+
+            <!-- Segmented Category Tabs -->
+            <div class="notif-tabs-bar" id="notif-tabs-bar">
+                <button class="notif-tab-btn active" data-category="return" id="notif-tab-return">
+                    <i data-lucide="rotate-ccw"></i>
+                    <span>Returns</span>
+                    <span class="notif-tab-count text-red" id="notif-count-return">0</span>
+                </button>
+                <button class="notif-tab-btn" data-category="stock" id="notif-tab-stock">
+                    <i data-lucide="boxes"></i>
+                    <span>Stock</span>
+                    <span class="notif-tab-count text-yellow" id="notif-count-stock">0</span>
+                </button>
+                <button class="notif-tab-btn" data-category="requests" id="notif-tab-requests">
+                    <i data-lucide="send"></i>
+                    <span>Requests</span>
+                    <span class="notif-tab-count text-cyan" id="notif-count-requests">0</span>
+                </button>
+                <button class="notif-tab-btn" data-category="system" id="notif-tab-system">
+                    <i data-lucide="terminal"></i>
+                    <span>System</span>
+                    <span class="notif-tab-count text-purple" id="notif-count-system">0</span>
+                </button>
+            </div>
+
+            <div class="logs-body notif-logs-body">
                 <div class="logs-list" id="logs-list">
-                    <!-- Logs dynamically loaded -->
+                    <!-- Notifications dynamically grouped and loaded -->
                 </div>
             </div>
         </div>
@@ -1171,19 +1371,23 @@
             </div>
             <div class="modal-body">
                 <p style="font-size:14px; line-height:1.6; color:var(--text-muted);">
-                    <strong>CICR</strong> is the premier student-run robotics cell at the Jaypee Institute of Information Technology (JIIT), Sector-128, Noida.
+                    <strong>CICR</strong> is the premier student-run robotics cell at the Jaypee Institute of
+                    Information Technology (JIIT), Sector-128, Noida.
                 </p>
                 <p style="font-size:14px; line-height:1.6; color:var(--text-muted);">
-                    Our cell serves as an incubator for creative engineering, hands-on robotics workshops, and competitive team projects in circuit layout, mechanical fabrication, and robotic controls.
+                    Our cell serves as an incubator for creative engineering, hands-on robotics workshops, and
+                    competitive team projects in circuit layout, mechanical fabrication, and robotic controls.
                 </p>
                 <div class="info-grid" style="grid-template-columns: 1fr; gap:12px; margin-top:8px;">
                     <div class="info-item">
                         <span class="info-label">Specializations</span>
-                        <span class="info-value" style="font-size:13px;">Embedded Firmware, Mechanical CAD, Computer Vision & ROS</span>
+                        <span class="info-value" style="font-size:13px;">Embedded Firmware, Mechanical CAD, Computer
+                            Vision & ROS</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Lab Facility</span>
-                        <span class="info-value" style="font-size:13px;">Robotics Research Lab, JIIT-128 Campus, Noida</span>
+                        <span class="info-value" style="font-size:13px;">Robotics Research Lab, JIIT-128 Campus,
+                            Noida</span>
                     </div>
                 </div>
             </div>
@@ -1201,16 +1405,18 @@
         <div class="modal-content glass small-modal">
             <button class="close-modal"><i data-lucide="x"></i></button>
             <div class="modal-header">
-                <h2><i data-lucide="key-round" class="text-cyan" style="vertical-align:middle; width:20px; height:20px;"></i> Reset Password</h2>
+                <h2><i data-lucide="key-round" class="text-cyan"
+                        style="vertical-align:middle; width:20px; height:20px;"></i> Reset Password</h2>
                 <p id="reset-modal-subtitle">Enter your college ID and choose your new password</p>
             </div>
-            
+
             <form id="reset-direct-form">
                 <div class="form-group">
                     <label for="reset-identifier">College Email or Enrollment Number</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="mail" class="input-icon"></i>
-                        <input type="text" id="reset-identifier" required placeholder="e.g. 992501030xxx or @mail.jiit.ac.in">
+                        <input type="text" id="reset-identifier" required
+                            placeholder="e.g. 992501030xxx or @mail.jiit.ac.in">
                     </div>
                 </div>
                 <div class="form-group">
@@ -1218,7 +1424,8 @@
                     <div class="input-icon-wrapper">
                         <i data-lucide="lock" class="input-icon"></i>
                         <input type="password" id="reset-new-password" required placeholder="Min. 6 characters">
-                        <button type="button" class="password-toggle-btn" id="reset-new-pass-toggle" title="Toggle visibility">
+                        <button type="button" class="password-toggle-btn" id="reset-new-pass-toggle"
+                            title="Toggle visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
@@ -1228,7 +1435,8 @@
                     <div class="input-icon-wrapper">
                         <i data-lucide="lock" class="input-icon"></i>
                         <input type="password" id="reset-confirm-password" required placeholder="Re-type new password">
-                        <button type="button" class="password-toggle-btn" id="reset-confirm-pass-toggle" title="Toggle visibility">
+                        <button type="button" class="password-toggle-btn" id="reset-confirm-pass-toggle"
+                            title="Toggle visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
@@ -1243,4 +1451,5 @@
 
     <!-- End Body -->
 </body>
+
 </html>

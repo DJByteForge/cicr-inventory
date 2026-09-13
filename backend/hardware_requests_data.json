@@ -1,1 +1,19 @@
-{}
+{
+  "req-local-67890": {
+    "id": "req-local-67890",
+    "itemId": "0d7f1ed4-bfdb-401e-82ea-875f691e5e1a",
+    "itemName": "Touch Sensor",
+    "category": "Robotics",
+    "borrowerName": "not gunjan",
+    "borrowerEmail": "001@mail.jiit.ac.in",
+    "rollNumber": "001",
+    "quantity": 1,
+    "purpose": "i wanna touch",
+    "durationDays": 7,
+    "dueDate": "",
+    "status": "APPROVED",
+    "requestedAt": "2026-09-13T23:08:01.515Z",
+    "reviewedAt": "2026-09-13T23:08:02.465Z",
+    "reviewedBy": "Vardaan Saxena"
+  }
+}

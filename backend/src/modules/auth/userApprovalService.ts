@@ -311,7 +311,16 @@ export const getAllAdminEmails = async (): Promise<string[]> => {
   return Array.from(adminSet);
 };
 
-export const syncApprovalsFromDatabase = async (): Promise<void> => {
+let lastApprovalSyncTime = 0;
+const APPROVAL_SYNC_COOLDOWN_MS = 60 * 1000; // 60-second cooldown between audit log DB syncs
+
+export const syncApprovalsFromDatabase = async (force = false): Promise<void> => {
+  const now = Date.now();
+  if (!force && now - lastApprovalSyncTime < APPROVAL_SYNC_COOLDOWN_MS) {
+    return;
+  }
+  lastApprovalSyncTime = now;
+
   try {
     const { data: logs, error } = await dbRead
       .from('audit_logs')

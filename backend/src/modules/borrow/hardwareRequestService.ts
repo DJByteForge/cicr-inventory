@@ -118,6 +118,7 @@ export const createHardwareRequest = async (payload: {
 
   requestsState[id] = newRequest;
   saveState();
+  invalidateHardwareRequestsCache();
 
   // Instant notification to Super Admins (Zero Emojis, Authentic High-Priority Cyber Notification)
   sendAdminHardwareRequestAlert(SUPER_ADMIN_EMAILS, {
@@ -137,7 +138,21 @@ export const createHardwareRequest = async (payload: {
   return newRequest;
 };
 
-export const getAllHardwareRequests = async (): Promise<HardwareIssueRequest[]> => {
+let cachedHardwareRequests: HardwareIssueRequest[] | null = null;
+let lastHardwareRequestsFetchTime = 0;
+const HARDWARE_REQUESTS_CACHE_TTL_MS = 15 * 1000; // 15s memory cache
+
+export const invalidateHardwareRequestsCache = () => {
+  cachedHardwareRequests = null;
+  lastHardwareRequestsFetchTime = 0;
+};
+
+export const getAllHardwareRequests = async (force = false): Promise<HardwareIssueRequest[]> => {
+  const now = Date.now();
+  if (!force && cachedHardwareRequests && now - lastHardwareRequestsFetchTime < HARDWARE_REQUESTS_CACHE_TTL_MS) {
+    return cachedHardwareRequests;
+  }
+
   const localList = Object.values(requestsState);
 
   // Also query pending rows from Supabase borrow_records
@@ -175,9 +190,13 @@ export const getAllHardwareRequests = async (): Promise<HardwareIssueRequest[]> 
     console.warn('[HARDWARE REQUEST] Error reading pending records from Supabase:', err);
   }
 
-  return localList.sort((a, b) => {
+  const sorted = localList.sort((a, b) => {
     return new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime();
   });
+
+  cachedHardwareRequests = sorted;
+  lastHardwareRequestsFetchTime = now;
+  return sorted;
 };
 
 export const getHardwareRequestById = (id: string): HardwareIssueRequest | undefined => {
@@ -187,7 +206,8 @@ export const getHardwareRequestById = (id: string): HardwareIssueRequest | undef
 export const approveHardwareRequest = async (
   id: string,
   adminName: string,
-  adminEmail: string
+  adminEmail: string,
+  fallback?: any
 ): Promise<{ success: boolean; request?: HardwareIssueRequest; error?: string }> => {
   let req = requestsState[id];
   if (!req) {
@@ -212,6 +232,27 @@ export const approveHardwareRequest = async (
       };
       requestsState[id] = req;
     }
+  }
+
+  // Fallback: If not found in server state, reconstruct from client request payload
+  if (!req && fallback && (fallback.itemId || fallback.inventory_id)) {
+    req = {
+      id,
+      itemId: fallback.itemId || fallback.inventory_id,
+      itemName: fallback.itemName || 'Hardware Component',
+      category: fallback.category || 'Robotics',
+      borrowerName: fallback.borrowerName || fallback.borrower_name || 'Member',
+      borrowerEmail: fallback.borrowerEmail || fallback.borrower_email || (fallback.rollNumber ? `${fallback.rollNumber}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in'),
+      rollNumber: fallback.rollNumber || fallback.roll_number || null,
+      userId: fallback.userId || fallback.user_id,
+      quantity: Number(fallback.quantity || fallback.qty) || 1,
+      purpose: fallback.purpose || 'Testing',
+      durationDays: Number(fallback.durationDays || fallback.duration_days) || 7,
+      dueDate: fallback.dueDate || fallback.due_date || '',
+      status: 'PENDING',
+      requestedAt: fallback.requestedAt || new Date().toISOString()
+    };
+    requestsState[id] = req;
   }
 
   if (!req) {
@@ -240,6 +281,7 @@ export const approveHardwareRequest = async (
   req.reviewedAt = new Date().toISOString();
   req.reviewedBy = adminName || adminEmail || 'ADMIN';
   saveState();
+  invalidateHardwareRequestsCache();
 
   const { borrowRecord, item, newAvailableQty, dueDate } = result;
 
@@ -320,7 +362,28 @@ export const rejectHardwareRequest = async (
   }
 
   if (!req) {
-    return { success: false, error: 'Request not found.' };
+    // If not found in server records, it was already cleared or was a local request.
+    // Return success immediately so the client can dismiss it cleanly on 1 click!
+    invalidateHardwareRequestsCache();
+    return {
+      success: true,
+      request: {
+        id,
+        itemId: '',
+        itemName: 'Component',
+        borrowerName: 'Member',
+        borrowerEmail: '',
+        quantity: 1,
+        purpose: '',
+        durationDays: 7,
+        dueDate: '',
+        status: 'REJECTED',
+        requestedAt: new Date().toISOString(),
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: adminName,
+        reviewNote: reason || 'Declined by administrator.'
+      }
+    };
   }
 
   if (req.status !== 'PENDING') {
@@ -339,6 +402,7 @@ export const rejectHardwareRequest = async (
   req.reviewedBy = adminName || adminEmail || 'ADMIN';
   req.reviewNote = reason || 'Declined by administrator.';
   saveState();
+  invalidateHardwareRequestsCache();
 
   // Send rejection email to user
   if (req.borrowerEmail) {
