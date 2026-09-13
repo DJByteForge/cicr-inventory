@@ -296,21 +296,30 @@ export const syncApprovalsFromDatabase = async (): Promise<void> => {
             continue;
           }
 
-          if (purgedEmails.has(email)) continue;
-
           if (log.action === 'Sign Up') {
+            purgedEmails.delete(email);
             const current = approvalState[email] || { status: 'PENDING', role: 'MEMBER' };
             current.status = 'PENDING';
             current.approvedAt = undefined;
             current.approvedBy = undefined;
+
+            const nameMatch = log.description?.match(/New Student registration:\s*([^(@]+)/i);
+            if (nameMatch) current.name = nameMatch[1].trim();
+            const usernameMatch = log.description?.match(/@([a-zA-Z0-9_.-]+)/);
+            if (usernameMatch) current.username = usernameMatch[1].trim();
+            const batchMatch = log.description?.match(/\[Batch:\s*([^,\]]+)/i);
+            if (batchMatch) current.batch = batchMatch[1].trim();
+
             approvalState[email] = current;
           } else if (log.action === 'User Approved') {
+            purgedEmails.delete(email);
             const current = approvalState[email] || { status: 'APPROVED', role: 'MEMBER' };
             current.status = 'APPROVED';
             current.approvedAt = log.timestamp;
             current.approvedBy = 'ADMIN';
             approvalState[email] = current;
           } else if (log.action === 'User Rejected') {
+            purgedEmails.delete(email);
             const current = approvalState[email] || { status: 'REJECTED', role: 'MEMBER' };
             current.status = 'REJECTED';
             current.approvedAt = undefined;

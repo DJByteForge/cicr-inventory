@@ -410,7 +410,7 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
     const allApprovals = getAllUserApprovals();
 
     const userList = (users || [])
-      .filter((u) => !u.email.endsWith('.test') && !isPurgedUser(u.email))
+      .filter((u) => !u.email.endsWith('.test'))
       .map((u) => {
         const normEmail = u.email.toLowerCase();
         const isMasterAdmin = isSuperAdminEmail(normEmail);
