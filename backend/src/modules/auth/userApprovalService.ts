@@ -13,6 +13,19 @@ export const isSuperAdminEmail = (email: string): boolean => {
   return SUPER_ADMIN_EMAILS.some((admin) => admin.toLowerCase() === norm);
 };
 
+export const isDesignatedAdmin = (email: string, name?: string): boolean => {
+  const norm = email.trim().toLowerCase();
+  const normName = (name || '').trim().toLowerCase();
+  return (
+    isSuperAdminEmail(norm) ||
+    norm.includes('dhruvi') ||
+    normName.includes('dhruvi') ||
+    norm.includes('aryan') ||
+    normName.includes('aryan varshney') ||
+    normName.includes('aryan')
+  );
+};
+
 export interface UserApprovalRecord {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   role: 'ADMIN' | 'MEMBER';
@@ -112,12 +125,21 @@ export const getUserApproval = (email: string, initialRole: 'ADMIN' | 'MEMBER' =
     };
   }
 
+  const isDesignated = isDesignatedAdmin(normEmail);
+  const isCollege = normEmail.endsWith('@mail.jiit.ac.in') || normEmail.endsWith('@jiit.ac.in');
+
   if (!approvalState[normEmail]) {
-    const isStudent = normEmail.endsWith('@mail.jiit.ac.in') || normEmail.endsWith('@jiit.ac.in');
     approvalState[normEmail] = {
-      status: 'PENDING',
-      role: isStudent ? 'MEMBER' : (initialRole === 'ADMIN' ? 'ADMIN' : 'MEMBER')
+      // Auto-approve college IDs and designated administrators
+      status: isCollege || isDesignated ? 'APPROVED' : 'PENDING',
+      role: isDesignated ? 'ADMIN' : (isCollege ? 'MEMBER' : (initialRole === 'ADMIN' ? 'ADMIN' : 'MEMBER')),
+      approvedAt: (isCollege || isDesignated) ? new Date().toISOString() : undefined,
+      approvedBy: (isCollege || isDesignated) ? 'SYSTEM (AUTO-APPROVE)' : undefined
     };
+    saveState();
+  } else if (isDesignated && approvalState[normEmail].role !== 'ADMIN') {
+    approvalState[normEmail].role = 'ADMIN';
+    approvalState[normEmail].status = 'APPROVED';
     saveState();
   }
 
@@ -131,6 +153,7 @@ export const setUserApproval = (
   metadata?: { username?: string | null; batch?: string | null; name?: string | null; roll_number?: string | null }
 ): UserApprovalRecord => {
   const normEmail = email.trim().toLowerCase();
+  const isDesignated = isDesignatedAdmin(normEmail, metadata?.name || undefined);
   
   if (isSuperAdminEmail(normEmail)) {
     return {
@@ -145,11 +168,19 @@ export const setUserApproval = (
 
   purgedEmails.delete(normEmail);
 
-  const current = approvalState[normEmail] || { status: 'PENDING', role: 'MEMBER' };
-  current.status = status;
-  if (status === 'APPROVED') {
+  const current = approvalState[normEmail] || { 
+    status: isDesignated ? 'APPROVED' : status, 
+    role: isDesignated ? 'ADMIN' : 'MEMBER' 
+  };
+  
+  current.status = isDesignated ? 'APPROVED' : status;
+  if (isDesignated) {
+    current.role = 'ADMIN';
+  }
+  
+  if (current.status === 'APPROVED') {
     current.approvedAt = new Date().toISOString();
-    current.approvedBy = approvedBy || 'ADMIN';
+    current.approvedBy = approvedBy || 'SYSTEM';
   } else {
     current.approvedAt = undefined;
     current.approvedBy = undefined;

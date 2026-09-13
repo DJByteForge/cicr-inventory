@@ -22,6 +22,7 @@ import { sendLoginOtpEmail, sendAdminNewUserRegistrationAlert } from '../../serv
 import {
   SUPER_ADMIN_EMAILS,
   isSuperAdminEmail,
+  isDesignatedAdmin,
   getUserApproval,
   setUserApproval
 } from './userApprovalService';
@@ -138,8 +139,9 @@ export const verifyOtp = async (req: Request, res: Response) => {
       const match = normalizedEmail.match(/^(\d+)@mail\.jiit\.ac\.in$/i);
       const userRoll = match ? match[1] : null;
       const isSuperAdmin = isSuperAdminEmail(normalizedEmail);
-      const userRole = isSuperAdmin ? 'ADMIN' : 'MEMBER';
-      const initialStatus = isSuperAdmin ? 'APPROVED' : 'PENDING';
+      const isDesignated = isDesignatedAdmin(normalizedEmail, displayName);
+      const userRole = (isSuperAdmin || isDesignated) ? 'ADMIN' : 'MEMBER';
+      const initialStatus = 'APPROVED';
 
       const { data: newUser, error: createErr } = await supabase
         .from('users')
@@ -160,29 +162,26 @@ export const verifyOtp = async (req: Request, res: Response) => {
       user = newUser;
       isNewUser = true;
 
-      // Track approval status
-      setUserApproval(normalizedEmail, initialStatus, isSuperAdmin ? 'SYSTEM' : undefined);
+      // Track approval status with auto-approval
+      setUserApproval(normalizedEmail, initialStatus, 'SYSTEM (AUTO-APPROVE)');
 
-      if (!isSuperAdmin) {
-        sendAdminNewUserRegistrationAlert(SUPER_ADMIN_EMAILS, {
-          userName: displayName,
-          userEmail: normalizedEmail,
-          rollNumber: userRoll,
-          registeredAt: user.created_at || new Date().toISOString()
-        }).catch((e) => console.error('[EMAIL ERROR] Failed to send admin registration alert for OTP signup:', e));
-
-        return res.status(200).json({
-          status: 'pending_approval',
-          message: 'Account registered successfully! Your access request has been sent to the CICR Admin for approval.',
-          user: { id: user.id, name: user.name, email: user.email, roll_number: user.roll_number, role: 'MEMBER', status: 'PENDING' }
-        });
-      }
+      sendAdminNewUserRegistrationAlert(SUPER_ADMIN_EMAILS, {
+        userName: displayName,
+        userEmail: normalizedEmail,
+        rollNumber: userRoll,
+        registeredAt: user.created_at || new Date().toISOString()
+      }).catch((e) => console.error('[EMAIL ERROR] Failed to send admin registration alert for OTP signup:', e));
     }
 
     const isSuperAdmin = isSuperAdminEmail(user.email);
-    const approval = isSuperAdmin
+    const isDesignated = isDesignatedAdmin(user.email, user.name);
+    let approval = (isSuperAdmin || isDesignated)
       ? { status: 'APPROVED' as const, role: 'ADMIN' as const }
       : getUserApproval(user.email, (user.role as any) || 'MEMBER');
+
+    if (approval.status === 'PENDING' && (user.email.endsWith('@mail.jiit.ac.in') || user.email.endsWith('@jiit.ac.in') || isDesignated)) {
+      approval = setUserApproval(user.email, 'APPROVED', 'SYSTEM (AUTO-APPROVE)');
+    }
 
     if (approval.status === 'PENDING') {
       return res.status(403).json({

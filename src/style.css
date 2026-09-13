@@ -8676,6 +8676,60 @@ body:not(.user-is-admin) #btn-modal-delete-item {
     }
 }
 
+/* ==========================================================================
+   Password Reset Flow & Credentials Synchronization UI
+   ========================================================================== */
+.auth-forgot-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -6px;
+    margin-bottom: 12px;
+}
+
+.auth-forgot-link {
+    font-size: 11.5px;
+    color: var(--neon-cyan);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-forgot-link:hover {
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+    transform: translateY(-1px);
+}
+
+.auth-forgot-link i {
+    width: 13px;
+    height: 13px;
+}
+
+.reset-target-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    border-radius: 8px;
+    font-size: 11.5px;
+    color: var(--neon-cyan);
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    margin-bottom: 8px;
+}
+
+.profile-key-btn:hover {
+    color: var(--neon-cyan) !important;
+    background: rgba(0, 240, 255, 0.1) !important;
+    transform: scale(1.1);
+}
+
+
 
 
 

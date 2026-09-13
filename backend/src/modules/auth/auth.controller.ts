@@ -8,6 +8,7 @@ import {
   MASTER_ADMIN_EMAIL,
   SUPER_ADMIN_EMAILS,
   isSuperAdminEmail,
+  isDesignatedAdmin,
   isPurgedUser,
   unpurgeEmail,
   getUserApproval,
@@ -86,8 +87,10 @@ export const register = async (req: Request, res: Response) => {
     }
 
     const isMasterAdmin = isSuperAdminEmail(normEmail);
-    const userRole = isMasterAdmin ? 'ADMIN' : 'MEMBER';
-    const initialStatus = isMasterAdmin ? 'APPROVED' : 'PENDING';
+    const isDesignated = isDesignatedAdmin(normEmail, name);
+    const userRole = (isMasterAdmin || isDesignated) ? 'ADMIN' : 'MEMBER';
+    // Auto-approve college accounts and designated admins!
+    const initialStatus = 'APPROVED';
 
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
@@ -130,8 +133,8 @@ export const register = async (req: Request, res: Response) => {
       newUser = insertedUser;
     }
 
-    // Track approval status and registration metadata
-    setUserApproval(normEmail, initialStatus, isMasterAdmin ? 'SYSTEM' : undefined, {
+    // Track approval status and registration metadata with AUTO-APPROVAL
+    setUserApproval(normEmail, 'APPROVED', 'SYSTEM (AUTO-APPROVE)', {
       username: normUsername,
       batch: userBatch,
       name: name.trim(),
@@ -143,7 +146,7 @@ export const register = async (req: Request, res: Response) => {
       action: 'Sign Up',
       userId: newUser.id,
       itemId: null,
-      description: `New ${isMasterAdmin ? 'Admin' : 'Student'} registration: ${name.trim()} (@${normUsername}, ${normEmail}) [Batch: ${userBatch || 'N/A'}, Status: ${initialStatus}]`
+      description: `New ${userRole === 'ADMIN' ? 'Admin' : 'Student'} registration (Auto-Approved): ${name.trim()} (@${normUsername}, ${normEmail}) [Batch: ${userBatch || 'N/A'}, Role: ${userRole}]`
     }).catch(() => {});
 
     // Send instant email notification to ALL Admins if non-master-admin registers
@@ -166,17 +169,17 @@ export const register = async (req: Request, res: Response) => {
       tempPassword: password,
       rollNumber: userRoll,
       batch: userBatch,
-      isAutoApproved: isMasterAdmin
+      isAutoApproved: true
     }).catch((e) => console.error('[EMAIL ERROR] Failed to send welcome credentials email:', e));
 
-    const message = isMasterAdmin
-      ? 'Admin registered and approved successfully!'
-      : 'Account registration submitted! Your request has been sent to CICR Admins for approval.';
+    const message = (isMasterAdmin || isDesignated)
+      ? `Admin registered and approved successfully! Welcome ${name.trim()}.`
+      : `Account registered and auto-approved successfully! You can now log in.`;
 
     return res.status(201).json({
       status: 'success',
       message,
-      data: { ...newUser, username: normUsername, batch: userBatch, status: initialStatus }
+      data: { ...newUser, username: normUsername, batch: userBatch, status: 'APPROVED' }
     });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
@@ -269,17 +272,25 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ status: 'error', message: 'Invalid credentials. Incorrect password.' });
     }
 
-    if (isMasterAdmin && user.role !== 'ADMIN') {
+    const isDesignated = isDesignatedAdmin(user.email, user.name);
+
+    if ((isMasterAdmin || isDesignated) && user.role !== 'ADMIN') {
       try {
         await supabase.from('users').update({ role: 'ADMIN' }).eq('id', user.id);
+        user.role = 'ADMIN';
       } catch (err) {
-        console.warn('Could not sync master admin role in DB:', err);
+        console.warn('Could not sync admin role in DB:', err);
       }
     }
 
-    let approval = isMasterAdmin
-      ? { status: 'APPROVED' as const, role: 'ADMIN' as const, username: user.email === 'vardaansaxena096@gmail.com' ? 'vardaan' : 'cicradmin', batch: undefined }
+    let approval = (isMasterAdmin || isDesignated)
+      ? { status: 'APPROVED' as const, role: 'ADMIN' as const, username: user.name, batch: undefined }
       : getUserApproval(user.email, user.role);
+
+    // Auto-approve college accounts and designated admins if pending
+    if (approval.status === 'PENDING' && (user.email.endsWith('@mail.jiit.ac.in') || user.email.endsWith('@jiit.ac.in') || isDesignated)) {
+      approval = setUserApproval(user.email, 'APPROVED', 'SYSTEM (AUTO-APPROVE)');
+    }
 
     if (approval.status === 'PENDING') {
       // Live sync check from Supabase audit_logs in case approved recently or on another container
@@ -311,10 +322,10 @@ export const login = async (req: Request, res: Response) => {
       return res.status(500).json({ status: 'error', message: 'Server misconfiguration.' });
     }
 
-    // Strict enforcement: Official JIIT student accounts are strictly MEMBER role
-    const effectiveRole = isMasterAdmin
+    // Strict role resolution: Dhruvi Gupta, Aryan Varshney, and master admins are ADMIN; normal users are MEMBER
+    const effectiveRole = (isMasterAdmin || isDesignated || user.role === 'ADMIN' || approval.role === 'ADMIN')
       ? 'ADMIN'
-      : (user.email.endsWith('@mail.jiit.ac.in') || user.email.endsWith('@jiit.ac.in') ? 'MEMBER' : approval.role);
+      : 'MEMBER';
 
     const token = jwt.sign(
       { id: user.id, name: user.name, email: user.email, role: effectiveRole },
