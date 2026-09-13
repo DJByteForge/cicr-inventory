@@ -25,7 +25,7 @@ export interface UserProvisionData {
   role?: 'ADMIN' | 'MEMBER';
 }
 
-const DEFAULT_TEMP_PASSWORD = 'CICR_INVENTORY@1234';
+const DEFAULT_TEMP_PASSWORD = process.env.DEFAULT_TEMP_PASSWORD || process.env.TEMP_PASSWORD || '';
 
 const TARGET_USERS: UserProvisionData[] = [
   {

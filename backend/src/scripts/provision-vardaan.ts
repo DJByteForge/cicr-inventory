@@ -14,7 +14,7 @@ async function main() {
   const username = 'VardaanSaxena_';
   const email = '992501030399@mail.jiit.ac.in';
   const roll_number = '992501030399';
-  const tempPassword = 'CICR_INVENTORY@1234';
+  const tempPassword = process.env.DEFAULT_TEMP_PASSWORD || process.env.TEMP_PASSWORD || '';
   const role = 'ADMIN';
 
   unpurgeEmail(email);
