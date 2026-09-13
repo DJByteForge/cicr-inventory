@@ -344,7 +344,7 @@ export const checkUserApprovalInDatabase = async (email: string): Promise<'APPRO
     const { data: logs } = await dbRead
       .from('audit_logs')
       .select('action, description, timestamp')
-      .in('action', ['Sign Up', 'User Approved', 'User Rejected'])
+      .in('action', ['Sign Up', 'User Approved', 'User Rejected', 'User Deleted'])
       .ilike('description', `%${normEmail}%`)
       .order('timestamp', { ascending: false })
       .limit(1);

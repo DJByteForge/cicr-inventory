@@ -8,7 +8,6 @@ import {
   MASTER_ADMIN_EMAIL,
   SUPER_ADMIN_EMAILS,
   isSuperAdminEmail,
-  isManagedUser,
   isPurgedUser,
   unpurgeEmail,
   getUserApproval,
@@ -80,13 +79,6 @@ export const register = async (req: Request, res: Response) => {
           message: `An account with enrollment number ${userRoll} is already registered. Please log in.`
         });
       }
-    }
-
-    if (isManagedUser(normEmail) && !isPurgedUser(normEmail)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
-      });
     }
 
     const isMasterAdmin = isSuperAdminEmail(normEmail);
