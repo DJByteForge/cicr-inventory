@@ -7,7 +7,6 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node --project tsconfig.json src/server.ts",
     "build": "tsc && node scripts/ensure-render-dist.cjs",
     "postinstall": "tsc && node scripts/ensure-render-dist.cjs",
-    "prestart": "tsc && node scripts/ensure-render-dist.cjs",
     "start": "node dist/server.js",
     "test": "node --test \"test/*.test.cjs\""
   },
