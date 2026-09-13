@@ -22,7 +22,10 @@ export const isDesignatedAdmin = (email: string, name?: string): boolean => {
     normName.includes('dhruvi') ||
     norm.includes('aryan') ||
     normName.includes('aryan varshney') ||
-    normName.includes('aryan')
+    normName.includes('aryan') ||
+    norm.includes('gunjan') ||
+    normName.includes('gunjan pal') ||
+    normName.includes('gunjan')
   );
 };
 

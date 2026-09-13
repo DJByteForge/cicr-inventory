@@ -2531,9 +2531,10 @@ class AuthManager {
 
         const isDhruvi = normEmail.includes('dhruvi') || username.toLowerCase().includes('dhruvi');
         const isAryan = normEmail.includes('aryan') || username.toLowerCase().includes('aryan');
+        const isGunjan = normEmail.includes('gunjan') || username.toLowerCase().includes('gunjan');
         const isMaster = normEmail === 'vardaansaxena096@gmail.com' || normEmail === 'cicrinventory@gmail.com';
 
-        if (isMaster || isDhruvi || isAryan || role === 'ADMIN') {
+        if (isMaster || isDhruvi || isAryan || isGunjan || role === 'ADMIN') {
             effectiveRole = 'ADMIN';
         } else {
             effectiveRole = 'MEMBER';
@@ -2792,34 +2793,23 @@ class AuthManager {
 }
 
 // ==========================================
-// 6.5 Password Reset & Credential Sync Manager
+// 6.5 Password Reset & Credential Sync Manager (No OTP)
 // ==========================================
 class PasswordResetManager {
     private static resetModal: HTMLElement;
-    private static step1Form: HTMLFormElement;
-    private static step2Form: HTMLFormElement;
+    private static directForm: HTMLFormElement;
     private static identifierInput: HTMLInputElement;
-    private static otpInput: HTMLInputElement;
     private static newPassInput: HTMLInputElement;
     private static confirmPassInput: HTMLInputElement;
-    private static step1Error: HTMLElement;
-    private static step1Success: HTMLElement;
-    private static step2Error: HTMLElement;
-    private static emailBadge: HTMLElement;
-    private static currentEmail: string = '';
+    private static errorEl: HTMLElement;
 
     static init() {
         this.resetModal = document.getElementById('reset-password-modal')!;
-        this.step1Form = document.getElementById('reset-request-form') as HTMLFormElement;
-        this.step2Form = document.getElementById('reset-verify-form') as HTMLFormElement;
+        this.directForm = document.getElementById('reset-direct-form') as HTMLFormElement;
         this.identifierInput = document.getElementById('reset-identifier') as HTMLInputElement;
-        this.otpInput = document.getElementById('reset-otp-input') as HTMLInputElement;
         this.newPassInput = document.getElementById('reset-new-password') as HTMLInputElement;
         this.confirmPassInput = document.getElementById('reset-confirm-password') as HTMLInputElement;
-        this.step1Error = document.getElementById('reset-req-error')!;
-        this.step1Success = document.getElementById('reset-req-success')!;
-        this.step2Error = document.getElementById('reset-verify-error')!;
-        this.emailBadge = document.getElementById('reset-target-email-badge')!;
+        this.errorEl = document.getElementById('reset-error')!;
 
         // Password visibility toggles
         const newPassToggle = document.getElementById('reset-new-pass-toggle');
@@ -2848,42 +2838,18 @@ class PasswordResetManager {
             });
         }
 
-        // Form 1 submit (Request OTP)
-        if (this.step1Form) {
-            this.step1Form.addEventListener('submit', (e) => {
+        if (this.directForm) {
+            this.directForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.handleRequestOtp();
-            });
-        }
-
-        // Form 2 submit (Verify OTP & Reset Password)
-        if (this.step2Form) {
-            this.step2Form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleVerifyReset();
-            });
-        }
-
-        // Back to step 1
-        const backBtn = document.getElementById('btn-back-to-step1');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                this.step2Form.style.display = 'none';
-                this.step1Form.style.display = 'block';
-                this.step2Error.style.display = 'none';
+                this.handleDirectReset();
             });
         }
     }
 
     static open() {
         if (!this.resetModal) return;
-        if (this.step1Form) this.step1Form.reset();
-        if (this.step2Form) this.step2Form.reset();
-        if (this.step1Error) this.step1Error.style.display = 'none';
-        if (this.step1Success) this.step1Success.style.display = 'none';
-        if (this.step2Error) this.step2Error.style.display = 'none';
-        if (this.step1Form) this.step1Form.style.display = 'block';
-        if (this.step2Form) this.step2Form.style.display = 'none';
+        if (this.directForm) this.directForm.reset();
+        if (this.errorEl) this.errorEl.style.display = 'none';
 
         // Pre-fill with current user's email or login input if available
         const currentLoginVal = (document.getElementById('login-username') as HTMLInputElement)?.value.trim();
@@ -2904,77 +2870,28 @@ class PasswordResetManager {
         }
     }
 
-    private static async handleRequestOtp() {
+    private static async handleDirectReset() {
         const identifier = this.identifierInput.value.trim();
-        this.step1Error.style.display = 'none';
-        this.step1Success.style.display = 'none';
-
-        if (!identifier) {
-            this.showStep1Error('Please enter your college email or enrollment number.');
-            return;
-        }
-
-        const submitBtn = document.getElementById('btn-submit-reset-request') as HTMLButtonElement;
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Dispatching Code...`;
-            lucide.createIcons();
-        }
-
-        try {
-            const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ identifier })
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                this.showStep1Error(data.message || 'Failed to dispatch verification code.');
-                return;
-            }
-
-            this.currentEmail = data.data?.email || identifier;
-            this.step1Form.style.display = 'none';
-            this.step2Form.style.display = 'block';
-            this.emailBadge.innerHTML = `<i data-lucide="mail-check" style="width:14px; height:14px;"></i> Code dispatched to <strong>${this.currentEmail}</strong>`;
-            lucide.createIcons();
-            this.otpInput.focus();
-            ToastManager.show('Code Dispatched', `A 6-digit verification code has been sent to ${this.currentEmail}. Check your inbox.`, 'success');
-        } catch (err) {
-            this.showStep1Error('Network error. Unable to contact authentication server.');
-        } finally {
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = `<i data-lucide="send"></i> Send Verification Code`;
-                lucide.createIcons();
-            }
-        }
-    }
-
-    private static async handleVerifyReset() {
-        const otp = this.otpInput.value.trim();
         const newPassword = this.newPassInput.value;
         const confirmPassword = this.confirmPassInput.value;
-        this.step2Error.style.display = 'none';
+        this.errorEl.style.display = 'none';
 
-        if (!otp || otp.length < 6) {
-            this.showStep2Error('Please enter the 6-digit verification code.');
+        if (!identifier) {
+            this.showError('Please enter your college email or enrollment number.');
             return;
         }
 
         if (newPassword.length < 6) {
-            this.showStep2Error('New password must be at least 6 characters.');
+            this.showError('New password must be at least 6 characters.');
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            this.showStep2Error('Passwords do not match. Please re-enter.');
+            this.showError('Passwords do not match. Please re-enter.');
             return;
         }
 
-        const submitBtn = document.getElementById('btn-submit-reset-verify') as HTMLButtonElement;
+        const submitBtn = document.getElementById('btn-submit-reset-direct') as HTMLButtonElement;
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Updating Database...`;
@@ -2986,8 +2903,7 @@ class PasswordResetManager {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: this.currentEmail,
-                    otp,
+                    identifier,
                     new_password: newPassword
                 })
             });
@@ -2995,14 +2911,14 @@ class PasswordResetManager {
             const data = await res.json();
 
             if (!res.ok) {
-                this.showStep2Error(data.message || 'Password reset failed. Invalid or expired code.');
+                this.showError(data.message || 'Password reset failed. Please check your email/enrollment.');
                 return;
             }
 
-            // Successfully reset password and synced with database!
+            // Successfully updated password in database!
             ToastManager.show(
                 'Password Updated & Synced',
-                'Your new password has been verified and saved to the database. You can now log in.',
+                'Your new password has been saved directly to the database! You can now log in.',
                 'success'
             );
 
@@ -3010,17 +2926,17 @@ class PasswordResetManager {
 
             // Pre-populate login form with email and switch to login view
             const loginUser = document.getElementById('login-username') as HTMLInputElement;
-            if (loginUser) loginUser.value = this.currentEmail;
+            if (loginUser) loginUser.value = identifier;
             const loginPass = document.getElementById('login-password') as HTMLInputElement;
             if (loginPass) {
-                loginPass.value = '';
+                loginPass.value = newPassword;
                 loginPass.focus();
             }
 
             document.getElementById('go-to-login')?.click();
-            DatabaseManager.addLog('system', `Password successfully updated for ${this.currentEmail}.`);
+            DatabaseManager.addLog('system', `Password successfully updated for ${identifier}.`);
         } catch (err) {
-            this.showStep2Error('Network error. Unable to contact authentication server.');
+            this.showError('Network error. Unable to contact authentication server.');
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
@@ -3030,20 +2946,12 @@ class PasswordResetManager {
         }
     }
 
-    private static showStep1Error(msg: string) {
-        this.step1Error.innerText = msg;
-        this.step1Error.style.display = 'block';
-        this.step1Error.style.animation = 'none';
-        this.step1Error.offsetHeight;
-        this.step1Error.style.animation = 'shake-error 0.4s ease';
-    }
-
-    private static showStep2Error(msg: string) {
-        this.step2Error.innerText = msg;
-        this.step2Error.style.display = 'block';
-        this.step2Error.style.animation = 'none';
-        this.step2Error.offsetHeight;
-        this.step2Error.style.animation = 'shake-error 0.4s ease';
+    private static showError(msg: string) {
+        this.errorEl.innerText = msg;
+        this.errorEl.style.display = 'block';
+        this.errorEl.style.animation = 'none';
+        this.errorEl.offsetHeight;
+        this.errorEl.style.animation = 'shake-error 0.4s ease';
     }
 }
 

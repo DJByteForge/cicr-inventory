@@ -680,65 +680,70 @@ export const forgotPassword = async (req: Request, res: Response) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// RESET PASSWORD (WITH OTP)
+// RESET PASSWORD (DIRECT DATABASE SYNC - NO OTP REQUIRED)
 // ──────────────────────────────────────────────────────────────────────────────
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const { email, otp, new_password } = req.body;
+    const { identifier, email, new_password, current_password } = req.body;
+    const loginId = (identifier || email || '').trim();
 
-    if (!email || !otp || !new_password) {
-      return res.status(400).json({ status: 'error', message: 'Email, verification code (OTP), and new password are required.' });
+    if (!loginId || !new_password) {
+      return res.status(400).json({ status: 'error', message: 'College email or enrollment number and new password are required.' });
     }
 
     if (String(new_password).length < 6) {
       return res.status(400).json({ status: 'error', message: 'New password must be at least 6 characters.' });
     }
 
-    const normEmail = email.trim().toLowerCase();
-    const cleanOtp = String(otp).trim();
+    const normId = loginId.toLowerCase();
 
-    // Verify OTP
-    const payload = verifyAuthOtp(cleanOtp);
-    if (!payload || payload.email.toLowerCase() !== normEmail) {
-      return res.status(400).json({ status: 'error', message: 'Invalid or expired verification code. Please request a new code.' });
+    // Lookup user in DB by email or roll_number
+    let user: any = null;
+    const { data: byEmail } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', normId).maybeSingle();
+    if (byEmail) {
+      user = byEmail;
+    } else {
+      const { data: byRoll } = await dbRead.from('users').select('id, name, email, password_hash').eq('roll_number', loginId).maybeSingle();
+      if (byRoll) user = byRoll;
     }
 
-    // Lookup user in DB
-    const { data: user, error: userErr } = await dbRead.from('users').select('id, name, email').eq('email', normEmail).maybeSingle();
-    if (userErr || !user) {
-      return res.status(404).json({ status: 'error', message: 'User account not found.' });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'No registered user found with that email or enrollment number.' });
     }
 
-    // Hash new password
+    // If current_password is provided, verify it
+    if (current_password && user.password_hash) {
+      const isMatch = await bcrypt.compare(current_password, user.password_hash);
+      if (!isMatch) {
+        return res.status(400).json({ status: 'error', message: 'Current password is incorrect.' });
+      }
+    }
+
+    // Hash new password with bcrypt
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(new_password, salt);
 
-    // Update password in DB
-    const { error: updateErr } = await dbWrite.from('users').update({ password_hash }).eq('id', user.id);
+    // Direct update in Supabase database!
+    const { error: updateErr } = await dbWrite.from('users').update({ 
+      password_hash
+    }).eq('id', user.id);
+
     if (updateErr) {
       console.error('[RESET PASSWORD ERROR] Failed to update password in DB:', updateErr);
       return res.status(500).json({ status: 'error', message: 'Failed to update password in database.' });
     }
 
-    // Consume OTP
-    consumeAuthOtp(cleanOtp);
-
-    // Send confirmation email
-    sendPasswordChangedSuccessEmail(user.email, {
-      userName: user.name,
-      changedAt: new Date()
-    }).catch((e) => console.error('[EMAIL ERROR] Failed to send password changed email:', e));
-
     logAuditEvent({
-      action: 'Password Reset Success',
+      action: 'Password Reset',
       userId: user.id,
       itemId: null,
-      description: `Password reset successfully via OTP for ${user.name} (${user.email})`
+      description: `Password updated directly for ${user.name} (${user.email})`
     }).catch(() => {});
 
     return res.status(200).json({
       status: 'success',
-      message: 'Your password has been reset successfully! You can now log in with your new password.'
+      message: 'Your password has been reset and updated in the database! You can now log in with your new password.',
+      data: { email: user.email }
     });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });

@@ -1102,41 +1102,21 @@
 
 
 
-    <!-- Password Reset Modal (Self-Service Reset Synced with Database) -->
+    <!-- Password Reset Modal (Direct Self-Service Reset Synced with Database - No OTP) -->
     <div class="modal-overlay" id="reset-password-modal">
         <div class="modal-content glass small-modal">
             <button class="close-modal"><i data-lucide="x"></i></button>
             <div class="modal-header">
                 <h2><i data-lucide="key-round" class="text-cyan" style="vertical-align:middle; width:20px; height:20px;"></i> Reset Password</h2>
-                <p id="reset-modal-subtitle">Reset your account password via verified email code</p>
+                <p id="reset-modal-subtitle">Enter your college ID and choose your new password</p>
             </div>
             
-            <!-- Step 1: Request OTP -->
-            <form id="reset-request-form">
+            <form id="reset-direct-form">
                 <div class="form-group">
                     <label for="reset-identifier">College Email or Enrollment Number</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="mail" class="input-icon"></i>
                         <input type="text" id="reset-identifier" required placeholder="e.g. 992501030xxx or @mail.jiit.ac.in">
-                    </div>
-                </div>
-                <div class="auth-error-msg" id="reset-req-error" style="display: none;"></div>
-                <div class="auth-success-msg" id="reset-req-success" style="display: none;"></div>
-                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-reset-request">
-                    <i data-lucide="send"></i> Send Verification Code
-                </button>
-            </form>
-
-            <!-- Step 2: Verify OTP and Set New Password -->
-            <form id="reset-verify-form" style="display: none;">
-                <div class="reset-target-badge" id="reset-target-email-badge">
-                    <i data-lucide="mail-check" style="width:14px; height:14px;"></i> Code dispatched to your college email
-                </div>
-                <div class="form-group" style="margin-top: 10px;">
-                    <label for="reset-otp-input">6-Digit Verification Code</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="hash" class="input-icon"></i>
-                        <input type="text" id="reset-otp-input" maxlength="6" required placeholder="Enter 6-digit code">
                     </div>
                 </div>
                 <div class="form-group">
@@ -1159,12 +1139,9 @@
                         </button>
                     </div>
                 </div>
-                <div class="auth-error-msg" id="reset-verify-error" style="display: none;"></div>
-                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-reset-verify">
+                <div class="auth-error-msg" id="reset-error" style="display: none;"></div>
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-reset-direct">
                     <i data-lucide="check-circle-2"></i> Update Password & Sync DB
-                </button>
-                <button type="button" class="btn btn-secondary btn-block" id="btn-back-to-step1" style="margin-top: 8px;">
-                    <i data-lucide="arrow-left"></i> Change Email
                 </button>
             </form>
         </div>
