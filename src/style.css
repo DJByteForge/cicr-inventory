@@ -8537,15 +8537,21 @@ body.theme-light .devs-clean-divider {
     font-family: monospace;
 }
 
-/* Item Card Delete Button */
+/* Item Card Header Actions & Delete Button */
+.card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 2;
+}
+
 .btn-card-delete-item {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 26px;
-    height: 26px;
+    position: static;
+    width: 24px;
+    height: 24px;
     border-radius: 6px;
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.12);
     border: 1px solid rgba(239, 68, 68, 0.35);
     color: #ef4444;
     display: inline-flex;
@@ -8553,20 +8559,30 @@ body.theme-light .devs-clean-divider {
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    z-index: 5;
+    flex-shrink: 0;
+    padding: 0;
 }
 
 .btn-card-delete-item:hover {
     background: #ef4444;
     color: #ffffff;
     border-color: #f87171;
-    transform: scale(1.1);
+    transform: translateY(-1px);
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
 }
 
-.btn-card-delete-item i {
-    width: 13px;
-    height: 13px;
+.btn-card-delete-item i,
+.btn-card-delete-item svg {
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+}
+
+/* Strict Admin-Only Security: Non-admins can NEVER see component delete buttons */
+body:not(.user-is-admin) .btn-card-delete-item,
+body:not(.user-is-admin) #btn-modal-delete-item {
+    display: none !important;
+    pointer-events: none !important;
 }
 
 .btn-modal-delete {

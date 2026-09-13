@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import { supabase } from '../../app';
-import { dbRead } from '../../config/database';
+import { dbWrite, dbRead } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { cacheGetJSON, cacheSetJSON, cacheInvalidate, cacheInvalidatePattern } from '../../config/redis';
 import { sendAdminItemCreatedNotification, sendAdminItemDeletedNotification } from '../../services/emailService';
@@ -15,7 +14,7 @@ const itemsListCacheKey = (category: unknown, search: unknown): string =>
 const itemsIdCacheKey = (id: string): string => `cicr:cache:items:id:${id}`;
 
 export const invalidateItemsCache = async (id?: string): Promise<void> => {
-  await cacheInvalidatePattern('cicr:cache:items:list:*');
+  await cacheInvalidatePattern('cicr:cache:items:*');
   if (id) await cacheInvalidate(itemsIdCacheKey(id));
 };
 
@@ -27,6 +26,10 @@ async function logAudit(action: string, userId: string | undefined, itemId: stri
 // GET /api/items (Search, Filter by Category, Get All) — cached 30s, read pool
 export const getItems = async (req: Request, res: Response) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const { category, search } = req.query;
     const cacheKey = itemsListCacheKey(category, search);
 
@@ -102,7 +105,7 @@ export const createItem = async (req: AuthRequest, res: Response) => {
 
     const qty = Number(quantity);
 
-    const { data: newItem, error } = await supabase
+    const { data: newItem, error } = await dbWrite
       .from('inventory')
       .insert([
         {
@@ -169,7 +172,7 @@ export const updateItem = async (req: AuthRequest, res: Response) => {
 
     updates.updated_at = new Date().toISOString();
 
-    const { data: updatedItem, error } = await supabase
+    const { data: updatedItem, error } = await dbWrite
       .from('inventory')
       .update(updates)
       .eq('id', id)
@@ -199,9 +202,9 @@ export const deleteItem = async (req: AuthRequest, res: Response) => {
     }
 
     // Clean up any historical borrow records referencing this item so foreign key won't fail
-    await supabase.from('borrow_records').delete().eq('inventory_id', id);
+    await dbWrite.from('borrow_records').delete().eq('inventory_id', id);
 
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
+    const { error } = await dbWrite.from('inventory').delete().eq('id', id);
     if (error) throw error;
 
     await invalidateItemsCache(id);

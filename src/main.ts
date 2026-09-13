@@ -443,8 +443,11 @@ class DatabaseManager {
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            // 1. Fetch live items from Supabase
-            const res = await fetch(`${API_BASE}/items`);
+            // 1. Fetch live items from Supabase with cache-busting
+            const res = await fetch(`${API_BASE}/items?_t=${Date.now()}`, {
+                cache: 'no-store',
+                headers
+            });
             if (res.ok) {
                 const json = await res.json();
                 const dbItems = json.data || [];
@@ -529,7 +532,8 @@ class DatabaseManager {
                 }
 
                 if (window.dashboard) {
-                    window.dashboard.init();
+                    window.dashboard.renderStats();
+                    window.dashboard.renderInventory();
                 }
             }
         } catch (err) {
@@ -622,6 +626,7 @@ class DatabaseManager {
 class DashboardManager {
     private activeCategory = 'all';
     private searchQuery = '';
+    public lastRenderedFingerprint = '';
     private listenersInitialized = false;
     private mobileSidebarOpen = false;
 
@@ -1087,7 +1092,7 @@ class DashboardManager {
         themeBtnPink?.addEventListener('click', () => ThemeManager.applyTheme('sakura'));
     }
 
-    private renderStats() {
+    public renderStats() {
         let totalQty = 0;
         let checkedOutQty = 0;
         let lowStockCount = 0;
@@ -1117,9 +1122,7 @@ class DashboardManager {
         this.statOut.innerText = String(outOfStockCount);
     }
 
-    private renderInventory() {
-        this.inventoryGrid.innerHTML = '';
-        
+    public renderInventory(force = false) {
         const filtered = inventory.filter(item => {
             const matchesCategory = this.activeCategory === 'all' || item.category === this.activeCategory;
             const matchesSearch = item.name.toLowerCase().includes(this.searchQuery) ||
@@ -1128,6 +1131,20 @@ class DashboardManager {
             return matchesCategory && matchesSearch;
         });
 
+        const role = ModalManager.getCurrentRole();
+        const currentFingerprint = `${role}_${this.activeCategory}_${this.searchQuery}_` + 
+            filtered.map(i => `${i.id}_${i.availableQuantity}_${i.quantity}_${i.name}_${i.location}_${(i.borrowedBy || []).length}`).join('|');
+
+        if (!force && this.lastRenderedFingerprint === currentFingerprint && this.inventoryGrid.children.length === filtered.length) {
+            // Inventory data and filters have not changed; do NOT destroy/re-render DOM cards to prevent items popping up repeatedly
+            return;
+        }
+
+        const isInitial = this.lastRenderedFingerprint === '';
+        this.lastRenderedFingerprint = currentFingerprint;
+
+        this.inventoryGrid.innerHTML = '';
+        
         if (filtered.length === 0) {
             this.noResults.style.display = 'flex';
             this.resultsCount.innerText = "Showing 0 items";
@@ -1139,14 +1156,22 @@ class DashboardManager {
 
         filtered.forEach((item, index) => {
             const card = this.createCardElement(item);
-            card.style.transitionDelay = `${(index % 4) * 0.08}s`;
+            if (isInitial) {
+                card.style.transitionDelay = `${(index % 4) * 0.08}s`;
+            } else {
+                card.style.transitionDelay = '0s';
+            }
             this.inventoryGrid.appendChild(card);
             
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    card.classList.add('active');
-                }, 50);
-            });
+            if (isInitial) {
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        card.classList.add('active');
+                    }, 50);
+                });
+            } else {
+                card.classList.add('active');
+            }
         });
 
         lucide.createIcons();
@@ -1154,7 +1179,7 @@ class DashboardManager {
 
     private async loadInventory() {
         await DatabaseManager.syncFromBackend();
-        this.renderInventory();
+        this.renderInventory(true);
         this.renderStats();
     }
 
@@ -1194,23 +1219,25 @@ class DashboardManager {
         const categoryLabel = catMap[item.category] || item.category;
         const isAdmin = ModalManager.getCurrentRole() === 'ADMIN';
         const deleteBtnHtml = isAdmin ? `
-            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${item.name}" title="Delete Component from Inventory">
+            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(item.name)}" title="Delete Component from Inventory">
                 <i data-lucide="trash-2"></i>
             </button>
         ` : '';
 
         card.innerHTML = `
-            ${deleteBtnHtml}
             <div class="card-header">
                 <span class="card-category">${categoryLabel}</span>
-                <span class="status-indicator ${statusClass}">${statusText}</span>
+                <div class="card-header-actions">
+                    <span class="status-indicator ${statusClass}">${statusText}</span>
+                    ${deleteBtnHtml}
+                </div>
             </div>
-            <h3 class="card-title">${item.name}</h3>
-            <p class="card-desc">${item.specs}</p>
+            <h3 class="card-title">${AdminManager.escapeHtml(item.name)}</h3>
+            <p class="card-desc">${AdminManager.escapeHtml(item.specs)}</p>
             <div class="card-footer">
                 <div class="footer-info">
                     <span class="info-title">Location</span>
-                    <span class="info-content"><i data-lucide="map-pin"></i> ${item.location}</span>
+                    <span class="info-content"><i data-lucide="map-pin"></i> ${AdminManager.escapeHtml(item.location)}</span>
                 </div>
                 <div class="footer-info" style="align-items: flex-end;">
                     <span class="info-title">Availability</span>
@@ -1224,6 +1251,7 @@ class DashboardManager {
             if (delBtn) {
                 delBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     AdminManager.promptDeleteItem(item.id, item.name);
                 });
             }
@@ -2489,6 +2517,7 @@ class AuthManager {
         }
 
         if (isAdmin) {
+            document.body.classList.add('user-is-admin');
             if (sideAdminLink) {
                 sideAdminLink.style.removeProperty('display');
                 sideAdminLink.style.setProperty('display', 'flex', 'important');
@@ -2503,6 +2532,7 @@ class AuthManager {
             }
             AdminManager.init();
         } else {
+            document.body.classList.remove('user-is-admin');
             if (sideAdminLink) {
                 sideAdminLink.style.setProperty('display', 'none', 'important');
             }
@@ -2516,6 +2546,10 @@ class AuthManager {
                 adminViewSection.style.setProperty('display', 'none', 'important');
                 adminViewSection.classList.remove('active');
             }
+        }
+
+        if (window.dashboard) {
+            window.dashboard.renderInventory(true);
         }
     }
 
@@ -3359,10 +3393,30 @@ class AdminManager {
                     });
                     const json = await res.json();
                     if (res.ok) {
-                        ToastManager.show('Item Removed', `"${itemName}" was permanently deleted from the vault.`, 'warning');
+                        // 1. Immediately remove item from local state & cache
+                        inventory = inventory.filter(it => it.id !== itemId && String(it.id) !== String(itemId));
+                        DatabaseManager.save();
+
+                        // 2. If detail modal is open for this item, close it
+                        if (selectedItem && (selectedItem.id === itemId || String(selectedItem.id) === String(itemId))) {
+                            ModalManager.closeAll();
+                        }
+
+                        // 3. Close the delete confirm modal
                         closeModal();
+
+                        // 4. Force re-render inventory grid and stats instantly
+                        if (window.dashboard) {
+                            window.dashboard.renderInventory(true);
+                            window.dashboard.renderStats();
+                        }
+
+                        ToastManager.show('Item Removed', `"${itemName}" was permanently deleted from the vault.`, 'warning');
+
+                        // 5. Sync from backend and update audit logs
                         await DatabaseManager.syncFromBackend();
                         await AdminManager.loadAuditLogs();
+                        DatabaseManager.updateNotificationBadges();
                     } else {
                         ToastManager.show('Delete Error', json.message || 'Failed to delete item.', 'error');
                     }
