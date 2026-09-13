@@ -106,6 +106,66 @@ class ToastManager {
             }
         }, 4200);
     }
+
+    static showWelcome(userName: string, role: string = 'MEMBER') {
+        this.init();
+        if (!this.container) return;
+
+        const displayRole = (role || 'MEMBER').toUpperCase();
+        const initial = (userName.trim().charAt(0) || 'U').toUpperCase();
+
+        const toast = document.createElement('div');
+        toast.className = 'cyber-toast toast-welcome';
+
+        toast.innerHTML = `
+            <div class="welcome-toast-glow"></div>
+            <div class="welcome-avatar-wrap">
+                <span class="welcome-avatar-letter">${initial}</span>
+                <span class="welcome-status-dot"></span>
+            </div>
+            <div class="welcome-body">
+                <div class="welcome-top-meta">
+                    <span class="welcome-badge">
+                        <i data-lucide="shield-check"></i> AUTHENTICATED
+                    </span>
+                    <span class="welcome-role-pill ${displayRole.toLowerCase()}">${displayRole}</span>
+                </div>
+                <div class="welcome-headline">
+                    Welcome, <span class="welcome-highlight-name">${userName}</span>
+                </div>
+                <div class="welcome-subtext">
+                    Access granted to CICR Robotics Inventory
+                </div>
+            </div>
+            <button class="toast-close-btn" title="Dismiss">
+                <i data-lucide="x" style="width:14px;height:14px;"></i>
+            </button>
+            <div class="welcome-progress-track">
+                <div class="welcome-progress-fill"></div>
+            </div>
+        `;
+
+        toast.querySelector('.toast-close-btn')!.addEventListener('click', () => {
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            setTimeout(() => toast.remove(), 350);
+        });
+
+        this.container.appendChild(toast);
+        lucide.createIcons();
+
+        requestAnimationFrame(() => {
+            setTimeout(() => toast.classList.add('show'), 20);
+        });
+
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.remove('show');
+                toast.classList.add('hide');
+                setTimeout(() => toast.remove(), 350);
+            }
+        }, 5500);
+    }
 }
 
 // ==========================================
@@ -2124,6 +2184,11 @@ class AuthManager {
                 const user = result.data;
                 if (user && user.status === 'APPROVED') {
                     this.loginSuccess(user.name, user.role, user);
+                    const welcomedKey = 'cicr_welcomed_' + (user.name || 'user');
+                    if (!sessionStorage.getItem(welcomedKey)) {
+                        sessionStorage.setItem(welcomedKey, 'true');
+                        ToastManager.showWelcome(user.name, user.role);
+                    }
                     return;
                 }
             }
@@ -2195,7 +2260,8 @@ class AuthManager {
                 const resolvedName = data.user?.name || identifier;
                 const role = data.user?.role || 'MEMBER';
                 this.loginSuccess(resolvedName, role, data.user);
-                ToastManager.show('Signed In Successfully', `Welcome back, ${resolvedName}!`, 'success');
+                sessionStorage.setItem('cicr_welcomed_' + resolvedName, 'true');
+                ToastManager.showWelcome(resolvedName, role);
                 return;
             }
 
@@ -2462,6 +2528,7 @@ class AuthManager {
         localStorage.removeItem('cicr_role');
         localStorage.removeItem('cicr_token');
         localStorage.removeItem('cicr_user');
+        sessionStorage.clear();
         
         this.updateAdminVisibility('MEMBER');
 
