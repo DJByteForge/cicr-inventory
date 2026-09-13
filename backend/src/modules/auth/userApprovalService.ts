@@ -275,7 +275,7 @@ export const syncApprovalsFromDatabase = async (): Promise<void> => {
     const { data: logs, error } = await dbRead
       .from('audit_logs')
       .select('action, description, timestamp')
-      .in('action', ['User Approved', 'User Rejected'])
+      .in('action', ['Sign Up', 'User Approved', 'User Rejected', 'User Deleted'])
       .order('timestamp', { ascending: true });
 
     if (error) {
@@ -285,25 +285,38 @@ export const syncApprovalsFromDatabase = async (): Promise<void> => {
 
     if (logs && logs.length > 0) {
       for (const log of logs) {
-        // Look for email in description e.g. "Admin Vardaan approved user account kush (992501030406@mail.jiit.ac.in)"
-        const match = log.description?.match(/\(([^)\s]+@[^)\s]+)\)/i);
+        const match = log.description?.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
         if (match) {
           const email = match[1].trim().toLowerCase();
           if (isSuperAdminEmail(email)) continue;
-          const isApproved = log.action === 'User Approved';
-          const current = approvalState[email] || {
-            status: isApproved ? 'APPROVED' : 'REJECTED',
-            role: 'MEMBER'
-          };
-          current.status = isApproved ? 'APPROVED' : 'REJECTED';
-          if (isApproved) {
-            current.approvedAt = log.timestamp;
-            current.approvedBy = 'ADMIN';
-          } else {
+
+          if (log.action === 'User Deleted') {
+            delete approvalState[email];
+            purgedEmails.add(email);
+            continue;
+          }
+
+          if (purgedEmails.has(email)) continue;
+
+          if (log.action === 'Sign Up') {
+            const current = approvalState[email] || { status: 'PENDING', role: 'MEMBER' };
+            current.status = 'PENDING';
             current.approvedAt = undefined;
             current.approvedBy = undefined;
+            approvalState[email] = current;
+          } else if (log.action === 'User Approved') {
+            const current = approvalState[email] || { status: 'APPROVED', role: 'MEMBER' };
+            current.status = 'APPROVED';
+            current.approvedAt = log.timestamp;
+            current.approvedBy = 'ADMIN';
+            approvalState[email] = current;
+          } else if (log.action === 'User Rejected') {
+            const current = approvalState[email] || { status: 'REJECTED', role: 'MEMBER' };
+            current.status = 'REJECTED';
+            current.approvedAt = undefined;
+            current.approvedBy = undefined;
+            approvalState[email] = current;
           }
-          approvalState[email] = current;
         }
       }
       saveState();
@@ -322,14 +335,18 @@ export const checkUserApprovalInDatabase = async (email: string): Promise<'APPRO
     const { data: logs } = await dbRead
       .from('audit_logs')
       .select('action, description, timestamp')
-      .in('action', ['User Approved', 'User Rejected'])
+      .in('action', ['Sign Up', 'User Approved', 'User Rejected'])
       .ilike('description', `%${normEmail}%`)
       .order('timestamp', { ascending: false })
       .limit(1);
 
     if (logs && logs.length > 0) {
       const latest = logs[0];
-      const status: 'APPROVED' | 'REJECTED' = latest.action === 'User Approved' ? 'APPROVED' : 'REJECTED';
+      const status: 'APPROVED' | 'REJECTED' | 'PENDING' =
+        latest.action === 'User Approved' ? 'APPROVED'
+        : latest.action === 'User Rejected' ? 'REJECTED'
+        : 'PENDING';
+
       const current = approvalState[normEmail] || { status, role: 'MEMBER' };
       current.status = status;
       if (status === 'APPROVED') {

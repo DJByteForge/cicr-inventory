@@ -411,9 +411,10 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
     const allApprovals = getAllUserApprovals();
 
     const userList = (users || [])
-      .filter((u) => !isPurgedUser(u.email) && !u.email.endsWith('.test'))
+      .filter((u) => !u.email.endsWith('.test'))
       .map((u) => {
         const normEmail = u.email.toLowerCase();
+        unpurgeEmail(normEmail);
         const isMasterAdmin = isSuperAdminEmail(normEmail);
         const record = isMasterAdmin
           ? { status: 'APPROVED' as const, role: 'ADMIN' as const }
@@ -423,7 +424,9 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
           id: u.id,
           name: u.name,
           email: u.email,
-          roll_number: u.roll_number,
+          username: record.username || null,
+          batch: record.batch || null,
+          roll_number: u.roll_number || record.roll_number || null,
           role: record.role,
           status: record.status,
           isMasterAdmin,
@@ -550,23 +553,44 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { data: user, error } = await dbRead.from('users').select('id, email, name').eq('id', id).single();
-    if (error || !user) return res.status(404).json({ status: 'error', message: 'User not found.' });
+    if (error || !user) return res.status(404).json({ status: 'error', message: 'User not found in database.' });
 
     if (isSuperAdminEmail(user.email)) {
       return res.status(400).json({ status: 'error', message: 'Cannot delete Super Admin.' });
     }
 
-    deleteUserApproval(user.email);
-    await supabase.from('users').delete().eq('id', id);
+    // 1. Clean up dependent foreign keys in database so deletion never fails
+    try {
+      await supabase.from('borrow_records').delete().eq('user_id', id);
+      await supabase.from('audit_logs').update({ user_id: null }).eq('user_id', id);
+    } catch (cleanErr) {
+      console.warn('[DELETE USER] Warning while cleaning references:', cleanErr);
+    }
 
-    logAuditEvent({
+    // 2. Permanently delete from Supabase PostgreSQL users table
+    const { error: dbDeleteError } = await supabase.from('users').delete().eq('id', id);
+    if (dbDeleteError) {
+      console.error('[DELETE USER ERROR] Supabase users table deletion failed:', dbDeleteError);
+      return res.status(500).json({ status: 'error', message: `Database deletion failed: ${dbDeleteError.message}` });
+    }
+
+    // Also delete by email if ID differed for any reason
+    if (user.email) {
+      await supabase.from('users').delete().ilike('email', user.email);
+    }
+
+    // 3. Remove approval and registration state
+    deleteUserApproval(user.email);
+
+    // 4. Log audit event
+    await logAuditEvent({
       action: 'User Deleted',
       userId: req.user?.id,
       itemId: null,
       description: `Admin ${req.user?.name || 'Admin'} deleted user ${user.name} (${user.email})`
     }).catch(() => {});
 
-    return res.status(200).json({ status: 'success', message: `User ${user.name} deleted.` });
+    return res.status(200).json({ status: 'success', message: `User ${user.name} permanently deleted from database.` });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
   }

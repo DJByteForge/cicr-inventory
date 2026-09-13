@@ -517,7 +517,7 @@ class DatabaseManager {
                                     type: l.action.toLowerCase().includes('borrow') ? 'borrow'
                                         : l.action.toLowerCase().includes('return') ? 'return'
                                         : l.action.toLowerCase().includes('add') ? 'add' : 'system',
-                                    timestamp: l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : new Date().toISOString().slice(0, 16),
+                                    timestamp: l.created_at || new Date().toISOString(),
                                     text: l.description || l.action
                                 }));
                                 localStorage.setItem('cicr_logs', JSON.stringify(logs));
@@ -668,6 +668,78 @@ class DashboardManager {
             this.setupEventListeners();
             this.listenersInitialized = true;
         }
+    }
+
+    static formatLogDateTime(raw: string | Date | undefined): { dateStr: string; timeStr: string } {
+        if (!raw) {
+            const now = new Date();
+            return {
+                dateStr: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+                timeStr: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(/\u202f/g, ' ').toUpperCase()
+            };
+        }
+
+        let d: Date | null = null;
+        const s = String(raw).trim();
+        const hasTime = s.includes(':');
+
+        if (raw instanceof Date) {
+            d = raw;
+        } else if (hasTime) {
+            const isoCandidate = s.includes(' ') && !s.includes('T') ? s.replace(' ', 'T') : s;
+            const parsed = new Date(isoCandidate);
+            if (!isNaN(parsed.getTime())) {
+                d = parsed;
+            }
+        }
+
+        if (d && !isNaN(d.getTime())) {
+            const dateStr = d.toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            }); // e.g. "13 Sep 2026"
+            const timeStr = d.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }).replace(/\u202f/g, ' ').toUpperCase(); // e.g. "03:13 PM"
+            return { dateStr, timeStr };
+        }
+
+        // Check if date-only format YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [year, month, day] = s.split('-');
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const mIdx = parseInt(month, 10) - 1;
+            if (mIdx >= 0 && mIdx < 12) {
+                return {
+                    dateStr: `${parseInt(day, 10)} ${monthNames[mIdx]} ${year}`,
+                    timeStr: ''
+                };
+            }
+        }
+
+        // Fallback for strings with T or space
+        if (s.includes('T') || s.includes(' ')) {
+            const sep = s.includes('T') ? 'T' : ' ';
+            const [datePart, timePart] = s.split(sep);
+            let formattedDate = datePart;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                const [year, month, day] = datePart.split('-');
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const mIdx = parseInt(month, 10) - 1;
+                if (mIdx >= 0 && mIdx < 12) {
+                    formattedDate = `${parseInt(day, 10)} ${monthNames[mIdx]} ${year}`;
+                }
+            }
+            return {
+                dateStr: formattedDate || s,
+                timeStr: timePart ? timePart.slice(0, 5) : ''
+            };
+        }
+
+        return { dateStr: s, timeStr: '' };
     }
 
     private setMobileSidebar(open: boolean) {
@@ -1640,10 +1712,14 @@ class ModalManager {
             activeOverdueList.forEach(({ item, rec, due }) => {
                 const logEl = document.createElement('div');
                 logEl.className = 'log-item log-action-overdue';
+                const dt = DashboardManager.formatLogDateTime(due);
                 logEl.innerHTML = `
                     <div class="log-meta">
                         <span class="log-type-tag"><i data-lucide="clock-alert"></i> OVERDUE</span>
-                        <span>Due: ${due}</span>
+                        <div class="log-timestamp-stack">
+                            <span class="log-date-line" style="color:#f87171;">Due: ${dt.dateStr}</span>
+                            ${dt.timeStr ? `<span class="log-time-line" style="color:#ef4444;">${dt.timeStr}</span>` : ''}
+                        </div>
                     </div>
                     <div class="log-text-content"><span>${rec.name}</span> (${rec.roll || 'Student'}) has not returned <span>${rec.qty}x ${item.name}</span>. Loan was due on <span>${due}</span>.</div>
                 `;
@@ -1661,10 +1737,14 @@ class ModalManager {
             activeLoansList.forEach(({ item, rec, due }) => {
                 const logEl = document.createElement('div');
                 logEl.className = 'log-item log-action-borrow';
+                const dt = DashboardManager.formatLogDateTime(due);
                 logEl.innerHTML = `
                     <div class="log-meta">
                         <span class="log-type-tag"><i data-lucide="shopping-cart"></i> ACTIVE LOAN</span>
-                        <span>Due: ${due}</span>
+                        <div class="log-timestamp-stack">
+                            <span class="log-date-line">Due: ${dt.dateStr}</span>
+                            ${dt.timeStr ? `<span class="log-time-line">${dt.timeStr}</span>` : ''}
+                        </div>
                     </div>
                     <div class="log-text-content"><span>${rec.name}</span> (${rec.roll || 'ID'}) borrowed <span>${rec.qty}x ${item.name}</span> for '${rec.purpose}'.</div>
                 `;
@@ -1741,10 +1821,14 @@ class ModalManager {
                     label = 'REJECTED';
                 }
 
+                const dt = DashboardManager.formatLogDateTime(log.timestamp);
                 logEl.innerHTML = `
                     <div class="log-meta">
                         <span class="log-type-tag"><i data-lucide="${icon}"></i> ${label}</span>
-                        <span>${log.timestamp}</span>
+                        <div class="log-timestamp-stack">
+                            <span class="log-date-line">${dt.dateStr}</span>
+                            ${dt.timeStr ? `<span class="log-time-line">${dt.timeStr}</span>` : ''}
+                        </div>
                     </div>
                     <div class="log-text-content">${log.text}</div>
                 `;
@@ -2558,6 +2642,8 @@ interface AdminUserRecord {
     id: string;
     name: string;
     email: string;
+    username?: string | null;
+    batch?: string | null;
     roll_number: string | null;
     role: 'ADMIN' | 'MEMBER';
     status: 'APPROVED' | 'PENDING' | 'REJECTED';
@@ -2993,18 +3079,21 @@ class AdminManager {
             return;
         }
 
-        container.innerHTML = pendingUsers.map(u => `
+        container.innerHTML = pendingUsers.map(u => {
+            const dt = DashboardManager.formatLogDateTime(u.created_at);
+            return `
             <div class="pending-request-card glass" data-user-id="${u.id}">
                 <div class="pending-card-top">
                     <div class="pending-card-avatar">${u.name.charAt(0).toUpperCase()}</div>
                     <div class="pending-card-meta">
-                        <span class="pending-card-name">${u.name}</span>
-                        <span class="pending-card-email">${u.email}</span>
+                        <span class="pending-card-name">${this.escapeHtml(u.name)}</span>
+                        <span class="pending-card-email">${this.escapeHtml(u.email)}</span>
                     </div>
                 </div>
                 <div class="pending-card-extra">
-                    <span><i data-lucide="calendar" style="width:11px; height:11px; vertical-align:middle;"></i> ${new Date(u.created_at).toLocaleDateString()}</span>
-                    ${u.roll_number ? `<span>• Roll: ${u.roll_number}</span>` : ''}
+                    <span><i data-lucide="calendar" style="width:11px; height:11px; vertical-align:middle;"></i> ${dt.dateStr}${dt.timeStr ? ` • ${dt.timeStr}` : ''}</span>
+                    ${u.roll_number ? `<span>• Roll: ${this.escapeHtml(u.roll_number)}</span>` : ''}
+                    ${u.batch ? `<span>• Batch: ${this.escapeHtml(u.batch)}</span>` : ''}
                 </div>
                 <div class="pending-card-actions">
                     <button class="btn-approve" onclick="window.adminApprove('${u.id}')">
@@ -3015,7 +3104,8 @@ class AdminManager {
                     </button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         lucide.createIcons();
     }
@@ -3033,49 +3123,92 @@ class AdminManager {
         if (usersList.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-dim);">No registered users matching search.</td>
+                    <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-dim); font-family: 'Orbitron', sans-serif; font-size: 11px;">
+                        <i data-lucide="shield-alert" style="width:20px;height:20px;display:block;margin:0 auto 8px auto;color:#64748b;"></i>
+                        No registered users matching search.
+                    </td>
                 </tr>
             `;
+            lucide.createIcons();
             return;
         }
 
         tbody.innerHTML = usersList.map(u => {
             const statusClass = u.status === 'APPROVED' ? 'approved' : u.status === 'PENDING' ? 'pending' : 'rejected';
             const isMaster = u.isMasterAdmin || u.email.toLowerCase() === 'vardaansaxena096@gmail.com' || u.email.toLowerCase() === 'cicrinventory@gmail.com';
-            const roleBadge = isMaster
-                ? `<span class="badge-role master"><i data-lucide="crown" style="width:10px;height:10px;"></i> MASTER ADMIN</span>`
+            
+            // Format registration date & time in 2 separate lines
+            const dt = DashboardManager.formatLogDateTime(u.created_at);
+            const dateHtml = `
+                <div class="user-reg-date-wrap">
+                    <span class="user-reg-date">${dt.dateStr}</span>
+                    <span class="user-reg-time"><i data-lucide="clock"></i>${dt.timeStr || '--:--'}</span>
+                </div>
+            `;
+
+            // Cyber avatar styles
+            const avatarGradient = isMaster
+                ? 'linear-gradient(135deg, #00f0ff, #facc15)'
                 : u.role === 'ADMIN'
-                    ? `<span class="badge-role admin"><i data-lucide="shield" style="width:10px;height:10px;"></i> ADMIN</span>`
-                    : `<span class="badge-role member">MEMBER</span>`;
+                    ? 'linear-gradient(135deg, #ff007a, #9333ea)'
+                    : 'linear-gradient(135deg, #00f0ff, #3b82f6)';
+
+            const avatarShadow = isMaster
+                ? '0 0 10px rgba(0, 240, 255, 0.4), 0 0 4px rgba(250, 204, 21, 0.3)'
+                : u.role === 'ADMIN'
+                    ? '0 0 10px rgba(255, 0, 122, 0.35)'
+                    : '0 0 8px rgba(0, 240, 255, 0.2)';
+
+            const roleBadge = isMaster
+                ? `<span class="badge-role master"><i data-lucide="crown"></i> MASTER ADMIN</span>`
+                : u.role === 'ADMIN'
+                    ? `<span class="badge-role admin"><i data-lucide="shield"></i> ADMIN</span>`
+                    : `<span class="badge-role member"><i data-lucide="user"></i> MEMBER</span>`;
 
             let actionsHtml = '';
             if (isMaster) {
-                actionsHtml = `<span style="font-size: 10px; color: var(--neon-cyan); font-weight:800; font-family:'Orbitron',sans-serif;">PERMANENT ADMIN</span>`;
+                actionsHtml = `<span class="badge-perm-admin"><i data-lucide="shield-check"></i> ROOT ACCESS</span>`;
             } else if (u.email.toLowerCase() === 'mahakkatahara.mk@gmail.com') {
-                const deleteBtn = `<button class="btn-table-action btn-del" onclick="window.adminDeleteUser('${u.id}', '${u.name}')" title="Delete User"><i data-lucide="trash-2"></i></button>`;
-                actionsHtml = `<span style="font-size: 10px; color: var(--text-dim); font-weight:600; margin-right:6px;">MEMBER ONLY</span> ${deleteBtn}`;
+                const deleteBtn = `<button class="btn-table-action btn-del" onclick="window.adminDeleteUser('${u.id}', '${this.escapeHtml(u.name)}')" title="Permanently Delete User"><i data-lucide="trash-2"></i></button>`;
+                actionsHtml = `<span class="badge-member-only">MEMBER ONLY</span> ${deleteBtn}`;
             } else {
                 const roleBtn = u.role === 'ADMIN'
                     ? `<button class="btn-table-action btn-demote" onclick="window.adminSetRole('${u.id}', 'MEMBER')" title="Demote to Member"><i data-lucide="shield-off"></i> Demote</button>`
                     : `<button class="btn-table-action btn-make-admin" onclick="window.adminSetRole('${u.id}', 'ADMIN')" title="Promote to Admin"><i data-lucide="shield-alert"></i> Make Admin</button>`;
                 
-                const deleteBtn = `<button class="btn-table-action btn-del" onclick="window.adminDeleteUser('${u.id}', '${u.name}')" title="Delete User"><i data-lucide="trash-2"></i></button>`;
+                const deleteBtn = `<button class="btn-table-action btn-del" onclick="window.adminDeleteUser('${u.id}', '${this.escapeHtml(u.name)}')" title="Permanently Delete User"><i data-lucide="trash-2"></i></button>`;
 
                 actionsHtml = `${roleBtn} ${deleteBtn}`;
             }
 
+            const metaSub = u.roll_number || u.batch
+                ? `<span class="user-cell-subtext">${u.roll_number ? `Roll: ${this.escapeHtml(u.roll_number)}` : ''}${u.roll_number && u.batch ? ' • ' : ''}${u.batch ? `Batch: ${this.escapeHtml(u.batch)}` : ''}</span>`
+                : (u.username ? `<span class="user-cell-subtext">@${this.escapeHtml(u.username)}</span>` : '');
+
             return `
-                <tr>
+                <tr data-user-id="${u.id}">
                     <td>
                         <div class="user-cell-name">
-                            <div class="user-cell-avatar">${u.name.charAt(0).toUpperCase()}</div>
-                            <span>${u.name}</span>
+                            <div class="user-cell-avatar" style="background: ${avatarGradient}; box-shadow: ${avatarShadow};">
+                                ${u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                            <div class="user-cell-meta-wrap">
+                                <span class="user-cell-display-name">${this.escapeHtml(u.name || 'Anonymous')}</span>
+                                ${metaSub}
+                            </div>
                         </div>
                     </td>
-                    <td>${u.email}</td>
-                    <td><span class="badge-status ${statusClass}">${u.status}</span></td>
+                    <td>
+                        <span class="user-email-text">${this.escapeHtml(u.email)}</span>
+                    </td>
+                    <td>
+                        <span class="badge-status ${statusClass}">
+                            <span class="status-pulse-dot dot-${statusClass}"></span>
+                            ${u.status}
+                        </span>
+                    </td>
                     <td>${roleBadge}</td>
-                    <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                    <td>${dateHtml}</td>
                     <td><div class="table-actions-cell">${actionsHtml}</div></td>
                 </tr>
             `;
@@ -3158,26 +3291,35 @@ class AdminManager {
     }
 
     static async deleteUser(id: string, name: string) {
-        if (!confirm(`Are you sure you want to permanently delete user "${name}"?`)) return;
+        if (!confirm(`Are you sure you want to permanently delete user "${name}"?\n\nThis will remove their profile, credentials, and all records from the database permanently.`)) return;
         const token = localStorage.getItem('cicr_token');
         try {
+            // Optimistically update local view immediately
+            this.users = this.users.filter(u => u.id !== id);
+            const searchInput = document.getElementById('admin-users-search') as HTMLInputElement;
+            this.renderUsersTable(this.filterUsers(searchInput?.value || ''));
+            this.renderPendingQueue();
+            this.updateStats();
+
             const res = await fetch(`${API_BASE}/auth/admin/users/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
-                ToastManager.show('User Deleted', `User ${name} has been removed.`, 'warning');
+                ToastManager.show('User Deleted', `User "${name}" has been permanently deleted from the database.`, 'warning');
                 DatabaseManager.addLog('system', `Admin deleted user profile "${name}" (${id})`);
                 await this.loadUsers();
                 await this.loadAuditLogs();
                 DatabaseManager.updateNotificationBadges();
             } else {
                 const err = await res.json().catch(() => ({}));
-                ToastManager.show('Delete Failed', err.message || 'Could not delete user', 'error');
+                ToastManager.show('Delete Failed', err.message || 'Could not delete user from database', 'error');
+                await this.loadUsers();
             }
         } catch (e) {
             console.error('Error deleting user:', e);
-            ToastManager.show('Network Error', 'Failed to delete user', 'error');
+            ToastManager.show('Network Error', 'Failed to communicate with database server', 'error');
+            await this.loadUsers();
         }
     }
 
@@ -3309,8 +3451,8 @@ class AdminManager {
             }
 
             const rawTime = log.timestamp || log.created_at || new Date().toISOString();
+            const dt = DashboardManager.formatLogDateTime(rawTime);
             const timeAgo = this.formatTimeAgo(rawTime);
-            const exactTime = new Date(rawTime).toLocaleTimeString('en-IN', { hour12: true });
 
             const actorName = log.users?.name || (log.user_id ? 'Member' : 'System');
             const actorEmail = log.users?.email || '';
@@ -3331,8 +3473,8 @@ class AdminManager {
                         </div>
                     </div>
                     <div class="audit-right-col">
-                        <span class="audit-time-ago">${timeAgo}</span>
-                        <span class="audit-time-exact">${exactTime}</span>
+                        <span class="audit-date-line">${dt.dateStr}</span>
+                        <span class="audit-time-line">${dt.timeStr} <span class="audit-ago-sub">(${timeAgo})</span></span>
                     </div>
                 </div>
             `;

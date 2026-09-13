@@ -15,8 +15,44 @@
     "992501030406@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T07:02:21.076+00:00",
+      "approvedAt": "2026-09-13T15:18:33.344+00:00",
       "approvedBy": "ADMIN"
+    },
+    "admin.1789288074763@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "123456@mail.jiit.ac.in": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "admin.1789294750933@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "member.1789294750933@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "admin.1789295040524@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "member.1789295040524@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "admin.1789304606498@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "member.1789304606498@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER"
+    },
+    "deltest@mail.jiit.ac.in": {
+      "status": "REJECTED",
+      "role": "MEMBER"
     },
     "992501030399@mail.jiit.ac.in": {
       "status": "APPROVED",
@@ -25,7 +61,5 @@
       "approvedBy": "ADMIN"
     }
   },
-  "purgedEmails": [
-    "992501030399@mail.jiit.ac.in"
-  ]
+  "purgedEmails": []
 }
