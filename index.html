@@ -72,9 +72,19 @@
     <div class="auth-overlay" id="auth-overlay">
         <div class="auth-card glass">
             <div class="auth-header">
-                <img src="logo.png" class="auth-logo" alt="CICR Logo" width="56" height="56">
+                <img src="logo.png" class="auth-logo" alt="CICR Logo" width="44" height="44">
                 <h2>CICR Inventory</h2>
-                <p id="auth-subtitle"> ~ Creative & Innovative Cell in Robotics</p>
+                <p id="auth-subtitle">~ Creative & Innovative Cell in Robotics</p>
+            </div>
+
+            <!-- Interactive Auth Mode Tabs -->
+            <div class="auth-tab-switch">
+                <button type="button" class="auth-tab-btn active" id="tab-login-btn">
+                    <i data-lucide="log-in"></i> Sign In
+                </button>
+                <button type="button" class="auth-tab-btn" id="tab-signup-btn">
+                    <i data-lucide="user-plus"></i> Register
+                </button>
             </div>
             
             <!-- Login Form -->
@@ -83,84 +93,84 @@
                     <label for="login-username">Email, Username, or Name</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="user" class="input-icon"></i>
-                        <input type="text" id="login-username" required placeholder="Enter your name, email, or username">
+                        <input type="text" id="login-username" required placeholder="Enter your name, email, or username" autocomplete="username">
                     </div>
                 </div>
                 <div class="form-group">
                     <label for="login-password">Password</label>
                     <div class="input-icon-wrapper">
                         <i data-lucide="lock" class="input-icon"></i>
-                        <input type="password" id="login-password" required placeholder="Enter your password">
+                        <input type="password" id="login-password" required placeholder="Enter your password" autocomplete="current-password">
                         <button type="button" class="password-toggle-btn" id="login-password-toggle" title="Toggle password visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
                 </div>
                 <div class="auth-error-msg" id="login-error" style="display: none;"></div>
-                <button type="submit" class="btn btn-primary btn-block">
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-login">
                     <i data-lucide="log-in"></i> Authenticate
                 </button>
                 <div class="auth-switch-prompt">
-                    Don't have an account? <a href="#" id="go-to-signup">Sign Up</a>
+                    Don't have an account? <a href="#" id="go-to-signup">Create Account</a>
                 </div>
             </form>
 
             <!-- Signup Form -->
             <form id="signup-form" style="display: none;">
-                <div class="form-group">
-                    <label for="signup-name">Full Name</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="user" class="input-icon"></i>
-                        <input type="text" id="signup-name" required placeholder="Enter your full name">
+                <div class="signup-form-grid">
+                    <div class="form-group">
+                        <label for="signup-name">Full Name</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="user" class="input-icon"></i>
+                            <input type="text" id="signup-name" required placeholder="Enter full name" autocomplete="name">
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="signup-email">College Email (@mail.jiit.ac.in)</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="mail" class="input-icon"></i>
-                        <input type="email" id="signup-email" required placeholder="Enter your college email (@mail.jiit.ac.in)">
+                    <div class="form-group">
+                        <label for="signup-username">Username</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="at-sign" class="input-icon"></i>
+                            <input type="text" id="signup-username" required placeholder="Choose username" autocomplete="username">
+                        </div>
                     </div>
-                    <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Official JIIT email format (enrollmentnumber@mail.jiit.ac.in)</span>
-                </div>
-                <div class="form-group">
-                    <label for="signup-username">Username</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="at-sign" class="input-icon"></i>
-                        <input type="text" id="signup-username" required placeholder="Enter your username">
+                    <div class="form-group">
+                        <label for="signup-email">College Email (@mail.jiit.ac.in)</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="mail" class="input-icon"></i>
+                            <input type="email" id="signup-email" required placeholder="enrollment@mail.jiit.ac.in" autocomplete="email">
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="signup-enrollment">Enrollment Number</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="hash" class="input-icon"></i>
-                        <input type="text" id="signup-enrollment" required placeholder="Enter your enrollment number">
+                    <div class="form-group">
+                        <label for="signup-enrollment">Enrollment Number</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="hash" class="input-icon"></i>
+                            <input type="text" id="signup-enrollment" required placeholder="e.g. 9923103001">
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label for="signup-batch">Batch / Lab Section (e.g. F1, F2, B3)</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="users" class="input-icon"></i>
-                        <input type="text" id="signup-batch" required placeholder="Enter your batch (e.g. F1, F2, B3)">
+                    <div class="form-group">
+                        <label for="signup-batch">Batch / Lab Section</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="users" class="input-icon"></i>
+                            <input type="text" id="signup-batch" required placeholder="e.g. F1, F2, B3">
+                        </div>
                     </div>
-                    <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Designated student lab section batch (e.g. F1, F2, B3)</span>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password">Choose Password</label>
-                    <div class="input-icon-wrapper">
-                        <i data-lucide="lock" class="input-icon"></i>
-                        <input type="password" id="signup-password" required placeholder="Enter your password (min. 6 characters)">
-                        <button type="button" class="password-toggle-btn" id="signup-password-toggle" title="Toggle password visibility">
-                            <i data-lucide="eye"></i>
-                        </button>
+                    <div class="form-group">
+                        <label for="signup-password">Choose Password</label>
+                        <div class="input-icon-wrapper">
+                            <i data-lucide="lock" class="input-icon"></i>
+                            <input type="password" id="signup-password" required placeholder="Min. 6 characters" autocomplete="new-password">
+                            <button type="button" class="password-toggle-btn" id="signup-password-toggle" title="Toggle password visibility">
+                                <i data-lucide="eye"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="auth-error-msg" id="signup-error" style="display: none;"></div>
                 <div class="auth-success-msg" id="signup-success" style="display: none;"></div>
-                <button type="submit" class="btn btn-primary btn-block">
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-signup">
                     <i data-lucide="user-plus"></i> Register Account
                 </button>
                 <div class="auth-switch-prompt">
-                    Already have an account? <a href="#" id="go-to-login">Login</a>
+                    Already have an account? <a href="#" id="go-to-login">Sign In</a>
                 </div>
             </form>
         </div>

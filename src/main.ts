@@ -2010,21 +2010,49 @@ class AuthManager {
     }
 
     private static setupEventListeners() {
-        document.getElementById('go-to-signup')!.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.loginForm.style.display = 'none';
-            this.signupForm.style.display = 'block';
-            this.loginErr.style.display = 'none';
-            this.signupForm.reset();
-        });
+        const authCard = document.querySelector('.auth-card') as HTMLElement | null;
+        const tabLoginBtn = document.getElementById('tab-login-btn');
+        const tabSignupBtn = document.getElementById('tab-signup-btn');
 
-        document.getElementById('go-to-login')!.addEventListener('click', (e) => {
-            e.preventDefault();
+        const switchToLogin = () => {
             this.signupForm.style.display = 'none';
             this.loginForm.style.display = 'block';
             this.signupErr.style.display = 'none';
             this.signupSuccess.style.display = 'none';
             this.loginForm.reset();
+            authCard?.classList.remove('auth-card-wide');
+            tabLoginBtn?.classList.add('active');
+            tabSignupBtn?.classList.remove('active');
+        };
+
+        const switchToSignup = () => {
+            this.loginForm.style.display = 'none';
+            this.signupForm.style.display = 'block';
+            this.loginErr.style.display = 'none';
+            this.signupForm.reset();
+            authCard?.classList.add('auth-card-wide');
+            tabSignupBtn?.classList.add('active');
+            tabLoginBtn?.classList.remove('active');
+        };
+
+        document.getElementById('go-to-signup')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchToSignup();
+        });
+
+        document.getElementById('go-to-login')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchToLogin();
+        });
+
+        tabLoginBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchToLogin();
+        });
+
+        tabSignupBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchToSignup();
         });
 
         this.loginForm.addEventListener('submit', (e) => {
@@ -2112,6 +2140,13 @@ class AuthManager {
         this.authOverlay.style.display = 'flex';
         this.appContainer.style.display = 'none';
         this.updateAdminVisibility('MEMBER');
+
+        // Reset to default sign-in state
+        this.signupForm.style.display = 'none';
+        this.loginForm.style.display = 'block';
+        document.querySelector('.auth-card')?.classList.remove('auth-card-wide');
+        document.getElementById('tab-login-btn')?.classList.add('active');
+        document.getElementById('tab-signup-btn')?.classList.remove('active');
     }
 
     private static isAllowedEmail(email: string): boolean {
