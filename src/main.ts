@@ -230,11 +230,8 @@ class Background3D {
     public updateThemeColors(theme: string) {
         this.currentTheme = theme;
         let fogHex = 0x06060e;
-        if (theme === 'matrix') fogHex = 0x020d07;
-        else if (theme === 'midnight') fogHex = 0x060e20;
-        else if (theme === 'light') fogHex = 0xf1f5f9;
+        if (theme === 'light') fogHex = 0xf1f5f9;
         else if (theme === 'sakura' || theme === 'pink') fogHex = 0xfce2ed;
-        else if (theme === 'avengers') fogHex = 0x090a15;
 
         if (this.canvas) {
             if (theme === 'sakura' || theme === 'pink' || theme === 'light') {
@@ -260,22 +257,10 @@ class Background3D {
         let color2 = new THREE.Color(0xbd00ff);
         let color3 = new THREE.Color(0xff007a);
 
-        if (theme === 'avengers') {
-            color1 = new THREE.Color(0x00f0ff); // Stark Arc Cyan
-            color2 = new THREE.Color(0xa855f7); // Wakanda Vibranium Purple
-            color3 = new THREE.Color(0xef4444); // Iron Crimson Energy
-        } else if (theme === 'sakura' || theme === 'pink') {
+        if (theme === 'sakura' || theme === 'pink') {
             color1 = new THREE.Color(0xec4899); // Sakura Blossom Pink
             color2 = new THREE.Color(0xf43f5e); // Rose Petal Crimson
             color3 = new THREE.Color(0xf472b6); // Soft Blossom Rose
-        } else if (theme === 'matrix') {
-            color1 = new THREE.Color(0x00ff66);
-            color2 = new THREE.Color(0x00cc44);
-            color3 = new THREE.Color(0x33ff88);
-        } else if (theme === 'midnight') {
-            color1 = new THREE.Color(0x38bdf8);
-            color2 = new THREE.Color(0x818cf8);
-            color3 = new THREE.Color(0xc084fc);
         } else if (theme === 'light') {
             color1 = new THREE.Color(0x0284c7);
             color2 = new THREE.Color(0x7c3aed);
@@ -3794,477 +3779,6 @@ class SakuraAnimation {
     }
 }
 
-// ==========================================
-// Avengers Cinematic Ambient Engine (Shield + Arc Reactor HUD)
-// ==========================================
-class AvengersAnimation {
-    private canvas: HTMLCanvasElement | null = null;
-    private ctx: CanvasRenderingContext2D | null = null;
-    private animationFrameId: number | null = null;
-    private isRunning = false;
-    private pulseTime = 0;
-    private particles: Array<{ x: number, y: number, speedX: number, speedY: number, size: number, alpha: number, color: string }> = [];
-
-    constructor() {
-        this.canvas = document.getElementById('avengers-canvas') as HTMLCanvasElement;
-        if (!this.canvas) return;
-        this.ctx = this.canvas.getContext('2d');
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
-    }
-
-    private resize() {
-        if (!this.canvas) return;
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-
-    public start() {
-        if (this.isRunning) return;
-        this.isRunning = true;
-        this.resize();
-        this.loop();
-    }
-
-    public stop() {
-        this.isRunning = false;
-        if (this.animationFrameId !== null) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-        }
-        this.particles = [];
-        if (this.ctx && this.canvas) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-    }
-
-    private spawnParticle() {
-        if (!this.canvas) return;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        
-        // Spawn from center shield or bottom of screen
-        const fromCenter = Math.random() > 0.4;
-        const x = fromCenter ? (w / 2 + (Math.random() - 0.5) * 60) : (Math.random() * w);
-        const y = fromCenter ? (h / 2 + (Math.random() - 0.5) * 60) : (h + 10);
-        
-        const speedX = (Math.random() - 0.5) * 0.7;
-        const speedY = 0.4 + Math.random() * 1.2;
-        const size = 1.0 + Math.random() * 2.2;
-        const alpha = 0.5 + Math.random() * 0.5;
-        const color = Math.random() > 0.5 ? 'rgba(0, 240, 255, 0.7)' : 'rgba(239, 68, 68, 0.7)';
-        
-        this.particles.push({ x, y, speedX, speedY, size, alpha, color });
-    }
-
-
-
-    private drawAvengersLogo(ctx: CanvasRenderingContext2D, r: number, color: string, strokeColor?: string, strokeWidth: number = 2) {
-        ctx.save();
-        ctx.lineJoin = 'miter';
-        ctx.shadowColor = 'rgba(0, 240, 255, 0.6)';
-        ctx.shadowBlur = 10;
-
-        // 1. Stylized letter "A"
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.15, -r * 0.85); // top-left peak
-        ctx.lineTo(r * 0.15, -r * 0.85);  // top-right peak
-        ctx.lineTo(r * 0.45, r * 0.55); // outer bottom-right leg
-        ctx.lineTo(r * 0.20, r * 0.55); // inner bottom-right leg
-        
-        ctx.lineTo(r * 0.12, r * 0.18); // crossbar top-right
-        ctx.lineTo(-r * 0.12, r * 0.18); // crossbar top-left
-        ctx.lineTo(-r * 0.28, r * 0.55); // outer bottom-left leg
-        ctx.lineTo(-r * 0.52, r * 0.55); // inner bottom-left leg
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        if (strokeColor) {
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-            ctx.stroke();
-        }
-
-        // Triangular hole inside the top of "A"
-        ctx.beginPath();
-        ctx.moveTo(0, -r * 0.5);
-        ctx.lineTo(r * 0.11, 0);
-        ctx.lineTo(-r * 0.11, 0);
-        ctx.closePath();
-        const innerBlueGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.08);
-        innerBlueGrad.addColorStop(0, '#60a5fa');
-        innerBlueGrad.addColorStop(0.7, '#2563eb');
-        innerBlueGrad.addColorStop(1, '#1e40af');
-        ctx.fillStyle = innerBlueGrad;
-        ctx.fill();
-        if (strokeColor) {
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-            ctx.stroke();
-        }
-
-        // 2. Crossbar arrow pointing right-up
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.12, r * 0.18); // crossbar start
-        ctx.lineTo(r * 0.55, r * 0.18);  // arrow tail bottom
-        ctx.lineTo(r * 0.55, r * 0.35);  // arrow barb bottom
-        ctx.lineTo(r * 0.90, r * 0.05);  // arrow head tip
-        ctx.lineTo(r * 0.50, -r * 0.28); // arrow barb top
-        ctx.lineTo(r * 0.50, -r * 0.05); // arrow tail top
-        ctx.lineTo(-r * 0.08, -r * 0.05); // crossbar top back
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        if (strokeColor) {
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = strokeWidth;
-            ctx.stroke();
-        }
-
-        // 3. Outer circle wrapping around "A" (with gap for bottom-left leg and top/right arrow)
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 0.72, -Math.PI * 0.05, Math.PI * 0.72); // bottom and right arc
-        ctx.lineWidth = r * 0.12;
-        ctx.strokeStyle = color;
-        ctx.stroke();
-
-        if (strokeColor) {
-            ctx.save();
-            ctx.lineWidth = strokeWidth;
-            ctx.strokeStyle = strokeColor;
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 0.72, Math.PI * 0.98, Math.PI * 1.58); // top-left arc
-        ctx.lineWidth = r * 0.12;
-        ctx.strokeStyle = color;
-        ctx.stroke();
-
-        if (strokeColor) {
-            ctx.save();
-            ctx.lineWidth = strokeWidth;
-            ctx.strokeStyle = strokeColor;
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        ctx.restore();
-    }
-
-    private drawBackground() {
-        if (!this.ctx || !this.canvas) return;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        this.ctx.clearRect(0, 0, w, h);
-
-        const cx = w / 2;
-        const cy = h / 2;
-        const baseRadius = Math.min(w, h) * 0.26;
-        const pulse = Math.sin(this.pulseTime) * 0.015;
-        const opacity = 0.16 + pulse;
-
-        // Sweeping holographic scanline bar (horizontal)
-        const scanY = (this.pulseTime * 140) % h;
-        this.ctx.save();
-        this.ctx.globalAlpha = opacity * 0.4;
-        const scanGrad = this.ctx.createLinearGradient(0, scanY - 60, 0, scanY + 60);
-        scanGrad.addColorStop(0, 'transparent');
-        scanGrad.addColorStop(0.5, 'rgba(0, 240, 255, 0.12)');
-        scanGrad.addColorStop(1, 'transparent');
-        this.ctx.fillStyle = scanGrad;
-        this.ctx.fillRect(0, scanY - 60, w, 120);
-        this.ctx.restore();
-
-        // 1. Particle update and draw loop (Sparks floating up)
-        if (this.particles.length < 50 && Math.random() < 0.25) {
-            this.spawnParticle();
-        }
-
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
-            p.y -= p.speedY;
-            p.x += p.speedX;
-            p.alpha -= 0.004;
-            if (p.alpha <= 0 || p.y < -10) {
-                this.particles.splice(i, 1);
-                continue;
-            }
-            this.ctx.save();
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = p.color;
-            this.ctx.globalAlpha = p.alpha * opacity;
-            this.ctx.fill();
-            this.ctx.restore();
-        }
-
-        this.ctx.save();
-        this.ctx.globalAlpha = opacity;
-
-        // 2. Soft Vibranium / Stark Arc Energy Aura Glow
-        const bgGlow = this.ctx.createRadialGradient(cx, cy, baseRadius * 0.2, cx, cy, baseRadius * 1.35);
-        bgGlow.addColorStop(0, 'rgba(239, 68, 68, 0.25)');
-        bgGlow.addColorStop(0.5, 'rgba(59, 130, 246, 0.15)');
-        bgGlow.addColorStop(0.85, 'rgba(0, 240, 255, 0.06)');
-        bgGlow.addColorStop(1, 'transparent');
-        this.ctx.beginPath();
-        this.ctx.arc(cx, cy, baseRadius * 1.35, 0, Math.PI * 2);
-        this.ctx.fillStyle = bgGlow;
-        this.ctx.fill();
-
-        // 3. Stark Dotted Tech Halo Rings (Opposite Rotation)
-        this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.rotate(-this.pulseTime * 0.07);
-
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.22, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(1.5, baseRadius * 0.015);
-        this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.35)';
-        this.ctx.stroke();
-
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.12, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(2, baseRadius * 0.02);
-        this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
-        this.ctx.setLineDash([8, 12]);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-        this.ctx.restore();
-
-        // Dotted Tech Ring Nodes (Clockwise Rotation)
-        this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.rotate(this.pulseTime * 0.05);
-        const nodes = 12;
-        for (let i = 0; i < nodes; i++) {
-            const angle = (i * Math.PI * 2) / nodes;
-            const nx = Math.cos(angle) * (baseRadius * 1.12);
-            const ny = Math.sin(angle) * (baseRadius * 1.12);
-            this.ctx.beginPath();
-            this.ctx.arc(nx, ny, Math.max(2, baseRadius * 0.018), 0, Math.PI * 2);
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            this.ctx.fill();
-        }
-        this.ctx.restore();
-
-        // 4. Rotating Radar Scanning Sweep
-        this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.rotate(this.pulseTime * 0.12);
-        const sweepGrad = this.ctx.createLinearGradient(0, 0, baseRadius * 1.25, 0);
-        sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.20)');
-        sweepGrad.addColorStop(1, 'transparent');
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, 0);
-        this.ctx.arc(0, 0, baseRadius * 1.25, -0.15, 0.15);
-        this.ctx.closePath();
-        this.ctx.fillStyle = sweepGrad;
-        this.ctx.fill();
-        this.ctx.restore();
-
-        // 5. CAPTAIN AMERICA SHIELD (Clockwise Rotation)
-        this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.rotate(this.pulseTime * 0.04);
-
-        // Outer Red Vibranium Ring
-        const redGrad1 = this.ctx.createRadialGradient(0, 0, baseRadius * 0.74, 0, 0, baseRadius);
-        redGrad1.addColorStop(0, '#f87171');
-        redGrad1.addColorStop(0.6, '#ef4444');
-        redGrad1.addColorStop(1, '#b91c1c');
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
-        this.ctx.fillStyle = redGrad1;
-        this.ctx.shadowColor = '#ef4444';
-        this.ctx.shadowBlur = 15;
-        this.ctx.fill();
-        this.ctx.shadowBlur = 0; // reset shadow
-
-        // Bold Outer Glowing Red Boundary of the Shield
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(3.5, baseRadius * 0.028);
-        this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-        this.ctx.stroke();
-
-        // Middle Silver White Ring
-        const silverGrad = this.ctx.createRadialGradient(0, 0, baseRadius * 0.48, 0, 0, baseRadius * 0.74);
-        silverGrad.addColorStop(0, '#ffffff');
-        silverGrad.addColorStop(0.5, '#e2e8f0');
-        silverGrad.addColorStop(1, '#94a3b8');
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.74, 0, Math.PI * 2);
-        this.ctx.fillStyle = silverGrad;
-        this.ctx.fill();
-
-        // Divided Arc Reactor divisions inside the silver ring (Counter-Rotating)
-        this.ctx.save();
-        this.ctx.rotate(-this.pulseTime * 0.08);
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.61, 0, Math.PI * 2);
-        this.ctx.lineWidth = 1.5;
-        this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.55)';
-        this.ctx.setLineDash([6, 8]);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-        this.ctx.restore();
-
-        // Middle Silver Glowing White Boundary
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.74, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(2.5, baseRadius * 0.02);
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-        this.ctx.stroke();
-
-        // Inner Red Ring
-        const redGrad2 = this.ctx.createRadialGradient(0, 0, baseRadius * 0.28, 0, 0, baseRadius * 0.48);
-        redGrad2.addColorStop(0, '#f87171');
-        redGrad2.addColorStop(0.7, '#ef4444');
-        redGrad2.addColorStop(1, '#b91c1c');
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.48, 0, Math.PI * 2);
-        this.ctx.fillStyle = redGrad2;
-        this.ctx.fill();
-
-        // Inner Red Glowing Boundary
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.48, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(2.5, baseRadius * 0.02);
-        this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-        this.ctx.stroke();
-
-        // Center Blue Disk
-        const blueGrad = this.ctx.createRadialGradient(0, 0, 0, 0, 0, baseRadius * 0.28);
-        blueGrad.addColorStop(0, '#60a5fa');
-        blueGrad.addColorStop(0.7, '#2563eb');
-        blueGrad.addColorStop(1, '#1e40af');
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.28, 0, Math.PI * 2);
-        this.ctx.fillStyle = blueGrad;
-        this.ctx.fill();
-
-        // Glowing Arc Reactor Core under the star
-        const coreGlow = this.ctx.createRadialGradient(0, 0, 0, 0, 0, baseRadius * 0.17);
-        coreGlow.addColorStop(0, '#ffffff');
-        coreGlow.addColorStop(0.4, 'rgba(0, 240, 255, 0.85)');
-        coreGlow.addColorStop(0.7, 'rgba(37, 99, 235, 0.35)');
-        coreGlow.addColorStop(1, 'transparent');
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.17, 0, Math.PI * 2);
-        this.ctx.fillStyle = coreGlow;
-        this.ctx.fill();
-
-        // Center Blue Glowing Cyan Boundary
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 0.28, 0, Math.PI * 2);
-        this.ctx.lineWidth = Math.max(2.5, baseRadius * 0.02);
-        this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.75)';
-        this.ctx.stroke();
-
-        // Glowing cyan outline backing for Avengers logo
-        this.drawAvengersLogo(
-            this.ctx,
-            baseRadius * 0.26,
-            'rgba(0, 240, 255, 0.28)',
-            '#00f0ff',
-            Math.max(2.8, baseRadius * 0.02)
-        );
-
-        // Center Stylized Avengers Logo with Black Boundary and Cyan Glow
-        this.drawAvengersLogo(
-            this.ctx,
-            baseRadius * 0.26,
-            '#ffffff',
-            '#000000',
-            Math.max(1.5, baseRadius * 0.012)
-        );
-
-        // Sweeping metallic light reflection sheen
-        this.ctx.save();
-        this.ctx.globalCompositeOperation = 'source-atop';
-        const sweepPos = Math.sin(this.pulseTime * 0.4) * baseRadius * 1.5;
-        const shineGrad = this.ctx.createLinearGradient(
-            -baseRadius + sweepPos, -baseRadius,
-            baseRadius + sweepPos, baseRadius
-        );
-        shineGrad.addColorStop(0, 'transparent');
-        shineGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0)');
-        shineGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.22)');
-        shineGrad.addColorStop(0.65, 'rgba(255, 255, 255, 0)');
-        shineGrad.addColorStop(1, 'transparent');
-        this.ctx.fillStyle = shineGrad;
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.restore();
-
-        this.ctx.restore();
-
-        // Stark Tech Telemetry Segments (Slow rotating)
-        this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.rotate(this.pulseTime * 0.035);
-        this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.16)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.28, 0.1, Math.PI * 0.45);
-        this.ctx.stroke();
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.28, Math.PI * 0.6, Math.PI * 0.95);
-        this.ctx.stroke();
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.28, Math.PI * 1.1, Math.PI * 1.45);
-        this.ctx.stroke();
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, baseRadius * 1.28, Math.PI * 1.6, Math.PI * 1.95);
-        this.ctx.stroke();
-        this.ctx.restore();
-
-        // 6. Light Stark HUD Target Crosshair Marks (Stationary)
-        this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.35)';
-        this.ctx.lineWidth = 1.4;
-        const notchLen = baseRadius * 0.18;
-
-        // Top
-        this.ctx.beginPath();
-        this.ctx.moveTo(cx, cy - baseRadius * 1.25);
-        this.ctx.lineTo(cx, cy - baseRadius * 1.25 + notchLen);
-        this.ctx.stroke();
-
-        // Bottom
-        this.ctx.beginPath();
-        this.ctx.moveTo(cx, cy + baseRadius * 1.25);
-        this.ctx.lineTo(cx, cy + baseRadius * 1.25 - notchLen);
-        this.ctx.stroke();
-
-        // Left
-        this.ctx.beginPath();
-        this.ctx.moveTo(cx - baseRadius * 1.25, cy);
-        this.ctx.lineTo(cx - baseRadius * 1.25 + notchLen, cy);
-        this.ctx.stroke();
-
-        // Right
-        this.ctx.beginPath();
-        this.ctx.moveTo(cx + baseRadius * 1.25, cy);
-        this.ctx.lineTo(cx + baseRadius * 1.25 - notchLen, cy);
-        this.ctx.stroke();
-
-        this.ctx.restore();
-    }
-
-    private loop() {
-        if (!this.isRunning) return;
-        this.pulseTime += 0.025;
-        this.drawBackground();
-        this.animationFrameId = requestAnimationFrame(() => this.loop());
-    }
-}
-
 // Extend global window interface for development debugging & admin actions
 declare global {
     interface Window {
@@ -4288,17 +3802,20 @@ class ThemeManager {
     private static navThemeSelectEl: HTMLSelectElement | null = null;
     private static headerThemeSelectEl: HTMLSelectElement | null = null;
     private static sakuraAnim: SakuraAnimation | null = null;
-    private static avengersAnim: AvengersAnimation | null = null;
 
     public static init() {
         this.sakuraAnim = new SakuraAnimation();
-        this.avengersAnim = new AvengersAnimation();
 
         this.themeSelectEl = document.getElementById('theme-select') as HTMLSelectElement;
         this.navThemeSelectEl = document.getElementById('nav-theme-select') as HTMLSelectElement;
         this.headerThemeSelectEl = document.getElementById('header-theme-select') as HTMLSelectElement;
 
-        const savedTheme = localStorage.getItem('cicr_vault_theme') || 'cyberpunk';
+        let savedTheme = localStorage.getItem('cicr_vault_theme') || 'cyberpunk';
+        if (savedTheme === 'matrix' || savedTheme === 'midnight' || savedTheme === 'avengers') {
+            savedTheme = 'cyberpunk';
+            localStorage.setItem('cicr_vault_theme', 'cyberpunk');
+            localStorage.setItem('cicr_theme', 'dark');
+        }
         this.applyTheme(savedTheme);
 
         if (this.themeSelectEl) {
@@ -4327,15 +3844,15 @@ class ThemeManager {
     }
 
     public static applyTheme(theme: string) {
+        if (theme === 'matrix' || theme === 'midnight' || theme === 'avengers') {
+            theme = 'cyberpunk';
+        }
         document.documentElement.setAttribute('data-theme', theme);
         document.body.classList.remove(
             'theme-cyberpunk',
-            'theme-matrix',
-            'theme-midnight',
             'theme-light',
             'theme-pink',
-            'theme-sakura',
-            'theme-avengers'
+            'theme-sakura'
         );
         document.body.classList.add(`theme-${theme}`);
         if (theme === 'pink' || theme === 'sakura') {
@@ -4370,13 +3887,8 @@ class ThemeManager {
 
         if (theme === 'sakura' || theme === 'pink') {
             this.sakuraAnim?.start();
-            this.avengersAnim?.stop();
-        } else if (theme === 'avengers') {
-            this.sakuraAnim?.stop();
-            this.avengersAnim?.start();
         } else {
             this.sakuraAnim?.stop();
-            this.avengersAnim?.stop();
         }
     }
 }
