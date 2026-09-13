@@ -3744,7 +3744,7 @@ class AdminManager {
                 role: 'ADMIN',
                 status: 'APPROVED',
                 isMasterAdmin: true,
-                batch: 'Coordinator, CICR',
+                batch: 'COORDINATOR',
                 created_at: '2026-09-08T17:00:00.000Z'
             },
             {
