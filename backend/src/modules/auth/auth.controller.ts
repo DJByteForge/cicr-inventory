@@ -17,7 +17,10 @@ import {
   setUserRole,
   deleteUserApproval,
   getAllUserApprovals,
-  findUserApprovalByIdentifier
+  findUserApprovalByIdentifier,
+  getAllAdminEmails,
+  syncApprovalsFromDatabase,
+  checkUserApprovalInDatabase
 } from './userApprovalService';
 import {
   sendAdminNewUserRegistrationAlert,
@@ -65,21 +68,6 @@ export const register = async (req: Request, res: Response) => {
     const normUsername = (username || name).trim();
     const userBatch = batch ? String(batch).trim() : null;
 
-    // Check if email already registered in DB or managed approval state
-    const { data: existingUser } = await dbRead
-      .from('users')
-      .select('id')
-      .eq('email', normEmail)
-      .maybeSingle();
-
-    if (existingUser || isManagedUser(normEmail)) {
-      return res.status(400).json({ status: 'error', message: 'Email already registered. Please log in.' });
-    }
-
-    const isMasterAdmin = isSuperAdminEmail(normEmail);
-    const userRole = isMasterAdmin ? 'ADMIN' : 'MEMBER';
-    const initialStatus = isMasterAdmin ? 'APPROVED' : 'PENDING';
-
     // Auto-extract enrollment number from student email if roll_number not provided
     let userRoll = roll_number ? String(roll_number).trim() : null;
     if (!userRoll) {
@@ -88,6 +76,41 @@ export const register = async (req: Request, res: Response) => {
         userRoll = match[1];
       }
     }
+
+    // Strict duplicate check across database: case-insensitive email OR roll number
+    const { data: existingMatches } = await dbRead
+      .from('users')
+      .select('id, email, roll_number')
+      .or(`email.ilike.${normEmail}${userRoll ? `,roll_number.eq.${userRoll}` : ''}`)
+      .limit(2);
+
+    if (existingMatches && existingMatches.length > 0) {
+      const emailMatch = existingMatches.find((u) => u.email?.toLowerCase() === normEmail);
+      if (emailMatch) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
+        });
+      }
+      const rollMatch = existingMatches.find((u) => userRoll && u.roll_number === userRoll);
+      if (rollMatch) {
+        return res.status(400).json({
+          status: 'error',
+          message: `An account with enrollment number ${userRoll} is already registered. Please log in.`
+        });
+      }
+    }
+
+    if (isManagedUser(normEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
+      });
+    }
+
+    const isMasterAdmin = isSuperAdminEmail(normEmail);
+    const userRole = isMasterAdmin ? 'ADMIN' : 'MEMBER';
+    const initialStatus = isMasterAdmin ? 'APPROVED' : 'PENDING';
 
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
@@ -109,6 +132,12 @@ export const register = async (req: Request, res: Response) => {
       .single();
 
     if (insertError || !insertedUser) {
+      if (insertError?.code === '23505') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'An account with this college email or enrollment number is already registered. Please log in.'
+        });
+      }
       console.error('[AUTH REGISTER ERROR] Supabase insert failed:', insertError);
       return res.status(500).json({ status: 'error', message: 'Failed to create user account. Please try again.' });
     }
@@ -131,9 +160,10 @@ export const register = async (req: Request, res: Response) => {
       description: `New ${isMasterAdmin ? 'Admin' : 'Student'} registration: ${name.trim()} (@${normUsername}, ${normEmail}) [Batch: ${userBatch || 'N/A'}, Status: ${initialStatus}]`
     }).catch(() => {});
 
-    // Send instant email notification to Admins if non-master-admin registers
+    // Send instant email notification to ALL Admins if non-master-admin registers
     if (!isMasterAdmin) {
-      sendAdminNewUserRegistrationAlert(SUPER_ADMIN_EMAILS, {
+      const adminRecipients = await getAllAdminEmails();
+      sendAdminNewUserRegistrationAlert(adminRecipients, {
         userName: name.trim(),
         userEmail: normEmail,
         username: normUsername,
@@ -251,9 +281,19 @@ export const login = async (req: Request, res: Response) => {
       }
     }
 
-    const approval = isMasterAdmin
+    let approval = isMasterAdmin
       ? { status: 'APPROVED' as const, role: 'ADMIN' as const, username: user.email === 'vardaansaxena096@gmail.com' ? 'vardaan' : 'cicradmin', batch: undefined }
       : getUserApproval(user.email, user.role);
+
+    if (approval.status === 'PENDING') {
+      // Live sync check from Supabase audit_logs in case approved recently or on another container
+      const dbStatus = await checkUserApprovalInDatabase(user.email);
+      if (dbStatus === 'APPROVED') {
+        approval = setUserApproval(user.email, 'APPROVED', 'ADMIN');
+      } else if (dbStatus === 'REJECTED') {
+        approval = setUserApproval(user.email, 'REJECTED', 'ADMIN');
+      }
+    }
 
     if (approval.status === 'PENDING') {
       return res.status(403).json({
@@ -492,6 +532,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
 export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
   try {
+    await syncApprovalsFromDatabase();
+
     const { data: users, error } = await dbRead
       .from('users')
       .select('id, name, email, roll_number, role, created_at')
@@ -537,22 +579,24 @@ export const approveUser = async (req: AuthRequest, res: Response) => {
     const approver = req.user?.name || 'Admin';
     const updated = setUserApproval(user.email, 'APPROVED', approver);
 
+    // Persist to audit_logs in Supabase so it's permanently stored across all instances and restarts
+    await logAuditEvent({
+      action: 'User Approved',
+      userId: req.user?.id,
+      itemId: null,
+      description: `Admin ${approver} approved user account ${user.name} (${user.email})`
+    });
+
     // Send instant approval confirmation email to user
     sendUserApprovalSuccessEmail(user.email, user.name).catch((e) =>
       console.error('[EMAIL ERROR] Failed to send user approval email:', e)
     );
 
-    // Instant alert to all superadmins
-    sendAdminUserStatusAlert(SUPER_ADMIN_EMAILS, user.name, user.email, 'APPROVED', approver).catch((e) =>
+    // Instant alert to all admins
+    const allAdmins = await getAllAdminEmails();
+    sendAdminUserStatusAlert(allAdmins, user.name, user.email, 'APPROVED', approver).catch((e) =>
       console.error('[EMAIL ERROR] Failed to send admin status alert:', e)
     );
-
-    logAuditEvent({
-      action: 'User Approved',
-      userId: req.user?.id,
-      itemId: null,
-      description: `Admin ${approver} approved user account ${user.name} (${user.email})`
-    }).catch(() => {});
 
     return res.status(200).json({
       status: 'success',
@@ -574,22 +618,24 @@ export const rejectUser = async (req: AuthRequest, res: Response) => {
     const rejector = req.user?.name || 'Admin';
     const updated = setUserApproval(user.email, 'REJECTED', rejector);
 
+    // Persist to audit_logs in Supabase
+    await logAuditEvent({
+      action: 'User Rejected',
+      userId: req.user?.id,
+      itemId: null,
+      description: `Admin ${rejector} rejected registration for ${user.name} (${user.email})`
+    });
+
     // Send rejection notification email to user
     sendUserRejectionNotificationEmail(user.email, user.name).catch((e) =>
       console.error('[EMAIL ERROR] Failed to send user rejection email:', e)
     );
 
-    // Instant alert to all superadmins
-    sendAdminUserStatusAlert(SUPER_ADMIN_EMAILS, user.name, user.email, 'REJECTED', rejector).catch((e) =>
+    // Instant alert to all admins
+    const allAdmins = await getAllAdminEmails();
+    sendAdminUserStatusAlert(allAdmins, user.name, user.email, 'REJECTED', rejector).catch((e) =>
       console.error('[EMAIL ERROR] Failed to send admin status alert:', e)
     );
-
-    logAuditEvent({
-      action: 'User Rejected',
-      userId: req.user?.id,
-      itemId: null,
-      description: `Admin ${rejector} rejected registration for ${user.name} (${user.email})`
-    }).catch(() => {});
 
     return res.status(200).json({ status: 'success', message: `User ${user.name} registration rejected.`, data: updated });
   } catch (err: any) {

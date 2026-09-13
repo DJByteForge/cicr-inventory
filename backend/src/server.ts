@@ -16,6 +16,8 @@ app.listen(PORT, () => {
 
 startReminderScheduler();
 
+import { syncApprovalsFromDatabase } from './modules/auth/userApprovalService';
+
 async function testConnection() {
   try {
     const { error } = await supabase.from('users').select('id').limit(1);
@@ -24,6 +26,8 @@ async function testConnection() {
     } else {
       console.log('⚡ Connected to Supabase PostgreSQL successfully!');
     }
+    // Hydrate persistent approvals from PostgreSQL audit logs
+    await syncApprovalsFromDatabase();
   } catch (err: any) {
     console.error('❌ Supabase connection failed:', err.message);
   }

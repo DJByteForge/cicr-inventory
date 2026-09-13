@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { dbRead } from '../../config/database';
 
 export const MASTER_ADMIN_EMAIL = 'vardaansaxena096@gmail.com';
 export const SUPER_ADMIN_EMAILS = [
@@ -250,5 +251,102 @@ export const findUserApprovalByIdentifier = (identifier: string): { email: strin
   }
 
   return null;
+};
+
+export const getAllAdminEmails = async (): Promise<string[]> => {
+  const adminSet = new Set<string>(SUPER_ADMIN_EMAILS.map((e) => e.toLowerCase()));
+  try {
+    const { data: dbAdmins } = await dbRead.from('users').select('email').eq('role', 'ADMIN');
+    if (dbAdmins) {
+      dbAdmins.forEach((u) => {
+        if (u.email && !u.email.endsWith('.test')) {
+          adminSet.add(u.email.toLowerCase());
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn('[USER APPROVAL] Could not fetch DB admins:', err?.message || err);
+  }
+  return Array.from(adminSet);
+};
+
+export const syncApprovalsFromDatabase = async (): Promise<void> => {
+  try {
+    const { data: logs, error } = await dbRead
+      .from('audit_logs')
+      .select('action, description, timestamp')
+      .in('action', ['User Approved', 'User Rejected'])
+      .order('timestamp', { ascending: true });
+
+    if (error) {
+      console.warn('[USER APPROVAL] Could not sync from audit_logs:', error.message);
+      return;
+    }
+
+    if (logs && logs.length > 0) {
+      for (const log of logs) {
+        // Look for email in description e.g. "Admin Vardaan approved user account kush (992501030406@mail.jiit.ac.in)"
+        const match = log.description?.match(/\(([^)\s]+@[^)\s]+)\)/i);
+        if (match) {
+          const email = match[1].trim().toLowerCase();
+          if (isSuperAdminEmail(email)) continue;
+          const isApproved = log.action === 'User Approved';
+          const current = approvalState[email] || {
+            status: isApproved ? 'APPROVED' : 'REJECTED',
+            role: 'MEMBER'
+          };
+          current.status = isApproved ? 'APPROVED' : 'REJECTED';
+          if (isApproved) {
+            current.approvedAt = log.timestamp;
+            current.approvedBy = 'ADMIN';
+          } else {
+            current.approvedAt = undefined;
+            current.approvedBy = undefined;
+          }
+          approvalState[email] = current;
+        }
+      }
+      saveState();
+      console.log(`[USER APPROVAL] Synced ${logs.length} approval log(s) from database.`);
+    }
+  } catch (err: any) {
+    console.warn('[USER APPROVAL] Failed to sync approvals from DB:', err?.message || err);
+  }
+};
+
+export const checkUserApprovalInDatabase = async (email: string): Promise<'APPROVED' | 'REJECTED' | 'PENDING'> => {
+  const normEmail = email.trim().toLowerCase();
+  if (isSuperAdminEmail(normEmail)) return 'APPROVED';
+
+  try {
+    const { data: logs } = await dbRead
+      .from('audit_logs')
+      .select('action, description, timestamp')
+      .in('action', ['User Approved', 'User Rejected'])
+      .ilike('description', `%${normEmail}%`)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    if (logs && logs.length > 0) {
+      const latest = logs[0];
+      const status: 'APPROVED' | 'REJECTED' = latest.action === 'User Approved' ? 'APPROVED' : 'REJECTED';
+      const current = approvalState[normEmail] || { status, role: 'MEMBER' };
+      current.status = status;
+      if (status === 'APPROVED') {
+        current.approvedAt = latest.timestamp;
+        current.approvedBy = 'ADMIN';
+      } else {
+        current.approvedAt = undefined;
+        current.approvedBy = undefined;
+      }
+      approvalState[normEmail] = current;
+      saveState();
+      return status;
+    }
+  } catch (err: any) {
+    console.warn('[USER APPROVAL] Live DB approval check error:', err?.message || err);
+  }
+
+  return approvalState[normEmail]?.status || 'PENDING';
 };
 
