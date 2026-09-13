@@ -450,7 +450,7 @@ Theme Switcher (src/main.ts) ──┼── Sakura (Cherry Blossom) ── 60 F
 
 ### 3. Meet The Developers & Mentors
 An interactive section celebrating the engineering minds behind the CICR Robotics Vault:
-- **Under The Guidance of**: Mentors Gunjan Pal (*Management Head*) and Dhruvi Gupta (*Management Head*).
+- **Under The Guidance of**: Mentors Gunjan Pal (*Management Head*), Aryan Varshney (*Coordinator, CICR*), and Dhruvi Gupta (*Management Head*).
 - **Meet The Developers**: Core engineering team members Vardaan Saxena, Kushagra Garg, Mahak Katahara, and Divyam Jain with custom glowing profile frames and role badges.
 
 ### 4. Collapsible Vault Index
@@ -744,6 +744,7 @@ Configure environment variables in the Render Dashboard matching `backend/.env.e
 
 ### Under The Guidance of
 - **Gunjan Pal** — Management Head, CICR
+- **Aryan Varshney** — Coordinator, CICR
 - **Dhruvi Gupta** — Management Head, CICR
 
 ### Core Engineering Team

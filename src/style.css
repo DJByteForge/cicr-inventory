@@ -6207,12 +6207,12 @@ body.theme-sakura .log-item {
     border-radius: 2px;
 }
 
-/* Mentors Grid: 2 clean spacious boxes */
+/* Mentors Grid: Clean spacious boxes centered */
 .mentors-clean-container {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 56px;
+    gap: 36px;
     width: 100%;
     flex-wrap: wrap;
     margin-bottom: 12px;
@@ -6269,6 +6269,12 @@ body.theme-sakura .log-item {
     transition: opacity 0.3s ease;
 }
 
+.box-glow-aura.aura-cyan { background: var(--neon-cyan); }
+.box-glow-aura.aura-purple { background: var(--neon-purple); }
+.box-glow-aura.aura-green { background: var(--neon-green); }
+.box-glow-aura.aura-pink { background: var(--neon-pink); }
+.box-glow-aura.aura-gold { background: #facc15; }
+
 .dev-profile-box:hover .box-glow-aura {
     opacity: 0.45;
 }
@@ -6304,6 +6310,10 @@ body.theme-sakura .log-item {
 .photo-glow-ring.ring-pink {
     border-color: rgba(255, 0, 122, 0.45);
     animation-direction: reverse;
+}
+
+.photo-glow-ring.ring-gold {
+    border-color: rgba(250, 204, 21, 0.55);
 }
 
 .photo-placeholder-content {
@@ -6346,6 +6356,10 @@ body.theme-sakura .log-item {
 
 .photo-glow-ring.ring-pink + .photo-placeholder-content {
     color: var(--neon-pink);
+}
+
+.photo-glow-ring.ring-gold + .photo-placeholder-content {
+    color: #facc15;
 }
 
 .dev-profile-box:hover .photo-placeholder-content {
@@ -6413,6 +6427,19 @@ body.theme-sakura .log-item {
     color: #ffffff;
     border-color: rgba(255, 255, 255, 0.3);
     background: rgba(255, 255, 255, 0.1);
+}
+
+.badge-coordinator {
+    color: #facc15;
+    background: rgba(250, 204, 21, 0.08);
+    border: 1px solid rgba(250, 204, 21, 0.4);
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.12);
+}
+
+.dev-profile-box:hover .badge-coordinator {
+    background: rgba(250, 204, 21, 0.16);
+    border-color: rgba(250, 204, 21, 0.7);
+    box-shadow: 0 0 16px rgba(250, 204, 21, 0.3);
 }
 
 /* Sleek Cyber Divider with extra breathing room */
