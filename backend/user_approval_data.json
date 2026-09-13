@@ -91,8 +91,8 @@
     "992501040035@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:56.092Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:35:13.917+00:00",
+      "approvedBy": "ADMIN",
       "username": "parivishamidha",
       "batch": "H2 IT",
       "name": "Parivisha Midha",
@@ -101,8 +101,8 @@
     "992501030398@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:56.449Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:54.959+00:00",
+      "approvedBy": "ADMIN",
       "username": "mahakkatahara",
       "batch": "F7 CSE",
       "name": "Mahak Katahara",
@@ -111,8 +111,8 @@
     "992501040037@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:57.158Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:35:10.247+00:00",
+      "approvedBy": "ADMIN",
       "username": "tanisha",
       "batch": "H2 IT",
       "name": "Tanisha",
@@ -121,8 +121,8 @@
     "992501210022@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:57.501Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:35:06.693+00:00",
+      "approvedBy": "ADMIN",
       "username": "utsavisinha",
       "batch": "E1 ECM",
       "name": "Utsavi Sinha",
@@ -131,8 +131,8 @@
     "992501030404@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:57.842Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:59.063+00:00",
+      "approvedBy": "ADMIN",
       "username": "agamjotsingh",
       "batch": "F7 CSE",
       "name": "Agamjot Singh",
@@ -141,8 +141,8 @@
     "992501210081@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:58.175Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:51.089+00:00",
+      "approvedBy": "ADMIN",
       "username": "tushargoyal",
       "batch": "E3 ECM",
       "name": "Tushar Goyal",
@@ -151,8 +151,8 @@
     "992501210030@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:58.518Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:48.313+00:00",
+      "approvedBy": "ADMIN",
       "username": "ashutoshsingh",
       "batch": "E1 ECM",
       "name": "Ashutosh Singh",
@@ -161,8 +161,8 @@
     "992510170013@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:26:58.867Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:43.853+00:00",
+      "approvedBy": "ADMIN",
       "username": "kanangoyal",
       "batch": "MCA1",
       "name": "Kanan Goyal",
@@ -171,8 +171,8 @@
     "992401030123@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "ADMIN",
-      "approvedAt": "2026-09-13T20:26:59.201Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:42.38+00:00",
+      "approvedBy": "ADMIN",
       "username": "dhruvigupta",
       "batch": "Management Head",
       "name": "Dhruvi Gupta",
@@ -181,8 +181,8 @@
     "992401030154@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "ADMIN",
-      "approvedAt": "2026-09-13T20:26:59.567Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:41.229+00:00",
+      "approvedBy": "ADMIN",
       "username": "aryanvarshney",
       "batch": "Coordinator, CICR",
       "name": "Aryan Varshney",
@@ -191,22 +191,28 @@
     "992401210050@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "ADMIN",
-      "approvedAt": "2026-09-13T20:26:59.904Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)",
+      "approvedAt": "2026-09-13T20:34:49.504+00:00",
+      "approvedBy": "ADMIN",
       "username": "gunjanpal",
       "batch": "Management Head",
       "name": "Gunjan Pal",
       "roll_number": "992401210050"
     },
+    "992501030399@mail.jiit.ac.in": {
+      "status": "APPROVED",
+      "role": "ADMIN",
+      "approvedAt": "2026-09-13T20:42:06.573Z",
+      "approvedBy": "SYSTEM",
+      "username": "VardaanSaxena_",
+      "name": "Vardaan Saxena",
+      "roll_number": "992501030399"
+    },
     "992501030406@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:33:46.131Z",
-      "approvedBy": "SYSTEM (AUTO-APPROVE)"
+      "approvedAt": "2026-09-13T20:34:53.686+00:00",
+      "approvedBy": "ADMIN"
     }
   },
-  "purgedEmails": [
-    "992501030399@mail.jiit.ac.in",
-    "992501030406@mail.jiit.ac.in"
-  ]
+  "purgedEmails": []
 }

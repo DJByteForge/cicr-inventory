@@ -2532,7 +2532,7 @@ class AuthManager {
         const isDhruvi = normEmail.includes('dhruvi') || username.toLowerCase().includes('dhruvi');
         const isAryan = normEmail.includes('aryan') || username.toLowerCase().includes('aryan');
         const isGunjan = normEmail.includes('gunjan') || username.toLowerCase().includes('gunjan');
-        const isMaster = normEmail === 'vardaansaxena096@gmail.com' || normEmail === 'cicrinventory@gmail.com';
+        const isMaster = normEmail === 'vardaansaxena096@gmail.com' || normEmail === 'cicrinventory@gmail.com' || normEmail === '992501030399@mail.jiit.ac.in' || normEmail.includes('vardaan') || username.toLowerCase().includes('vardaan');
 
         if (isMaster || isDhruvi || isAryan || isGunjan || role === 'ADMIN') {
             effectiveRole = 'ADMIN';

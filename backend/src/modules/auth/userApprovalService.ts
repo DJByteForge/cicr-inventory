@@ -5,7 +5,8 @@ import { dbRead } from '../../config/database';
 export const MASTER_ADMIN_EMAIL = 'vardaansaxena096@gmail.com';
 export const SUPER_ADMIN_EMAILS = [
   'vardaansaxena096@gmail.com',
-  'cicrinventory@gmail.com'
+  'cicrinventory@gmail.com',
+  '992501030399@mail.jiit.ac.in'
 ];
 
 export const isSuperAdminEmail = (email: string): boolean => {
@@ -18,6 +19,9 @@ export const isDesignatedAdmin = (email: string, name?: string): boolean => {
   const normName = (name || '').trim().toLowerCase();
   return (
     isSuperAdminEmail(norm) ||
+    norm.includes('vardaan') ||
+    normName.includes('vardaan') ||
+    norm.includes('992501030399') ||
     norm.includes('dhruvi') ||
     normName.includes('dhruvi') ||
     norm.includes('aryan') ||
