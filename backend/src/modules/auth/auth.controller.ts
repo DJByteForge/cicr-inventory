@@ -86,14 +86,14 @@ export const register = async (req: Request, res: Response) => {
 
     if (existingMatches && existingMatches.length > 0) {
       const emailMatch = existingMatches.find((u) => u.email?.toLowerCase() === normEmail);
-      if (emailMatch) {
+      if (emailMatch && !isPurgedUser(normEmail)) {
         return res.status(400).json({
           status: 'error',
           message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
         });
       }
       const rollMatch = existingMatches.find((u) => userRoll && u.roll_number === userRoll);
-      if (rollMatch) {
+      if (rollMatch && !isPurgedUser(rollMatch.email)) {
         return res.status(400).json({
           status: 'error',
           message: `An account with enrollment number ${userRoll} is already registered. Please log in.`
@@ -101,7 +101,7 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    if (isManagedUser(normEmail)) {
+    if (isManagedUser(normEmail) && !isPurgedUser(normEmail)) {
       return res.status(400).json({
         status: 'error',
         message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
@@ -117,32 +117,41 @@ export const register = async (req: Request, res: Response) => {
 
     unpurgeEmail(normEmail);
 
-    let newUser: any = {
-      name: name.trim(),
-      email: normEmail,
-      roll_number: userRoll,
-      role: userRole,
-      created_at: new Date().toISOString()
-    };
+    let newUser: any = null;
+    const existingPurged = existingMatches?.find((u) => u.email?.toLowerCase() === normEmail);
 
-    const { data: insertedUser, error: insertError } = await supabase
-      .from('users')
-      .insert([{ name: name.trim(), email: normEmail, password_hash, roll_number: userRoll, role: userRole }])
-      .select('id, name, email, roll_number, role, created_at')
-      .single();
-
-    if (insertError || !insertedUser) {
-      if (insertError?.code === '23505') {
-        return res.status(400).json({
-          status: 'error',
-          message: 'An account with this college email or enrollment number is already registered. Please log in.'
-        });
+    if (existingPurged) {
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update({ name: name.trim(), password_hash, roll_number: userRoll, role: userRole })
+        .eq('id', existingPurged.id)
+        .select('id, name, email, roll_number, role, created_at')
+        .single();
+      if (updateError || !updatedUser) {
+        newUser = { id: existingPurged.id, name: name.trim(), email: normEmail, roll_number: userRoll, role: userRole, created_at: new Date().toISOString() };
+      } else {
+        newUser = updatedUser;
       }
-      console.error('[AUTH REGISTER ERROR] Supabase insert failed:', insertError);
-      return res.status(500).json({ status: 'error', message: 'Failed to create user account. Please try again.' });
-    }
+    } else {
+      const { data: insertedUser, error: insertError } = await supabase
+        .from('users')
+        .insert([{ name: name.trim(), email: normEmail, password_hash, roll_number: userRoll, role: userRole }])
+        .select('id, name, email, roll_number, role, created_at')
+        .single();
 
-    newUser = insertedUser;
+      if (insertError || !insertedUser) {
+        if (insertError?.code === '23505') {
+          return res.status(400).json({
+            status: 'error',
+            message: 'An account with this college email or enrollment number is already registered. Please log in.'
+          });
+        }
+        console.error('[AUTH REGISTER ERROR] Supabase insert failed:', insertError);
+        return res.status(500).json({ status: 'error', message: 'Failed to create user account. Please try again.' });
+      }
+
+      newUser = insertedUser;
+    }
 
     // Track approval status and registration metadata
     setUserApproval(normEmail, initialStatus, isMasterAdmin ? 'SYSTEM' : undefined, {
