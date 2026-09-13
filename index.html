@@ -400,9 +400,9 @@
                  </div>
                  
                  <div class="header-right">
-                     <div class="header-search">
+                     <div class="header-search" id="header-search-box" style="cursor: pointer;" title="Search components or jump to page (Ctrl + K)">
                          <i data-lucide="search" class="search-icon"></i>
-                         <input type="text" id="header-search-input" placeholder="Search...">
+                         <input type="text" id="header-search-input" placeholder="Search components, jump to page..." readonly style="cursor: pointer;">
                          <span class="search-kbd">Ctrl K</span>
                      </div>
                      <div class="header-theme-box">
@@ -877,6 +877,31 @@
 
 
     
+    <!-- Command Palette / Universal Search Modal -->
+    <div class="modal-overlay command-palette-overlay" id="command-palette-modal">
+        <div class="command-palette-container glass">
+            <div class="command-palette-search-bar">
+                <i data-lucide="search" class="command-palette-search-icon"></i>
+                <input type="text" id="command-palette-input" placeholder="Search any component, page, or action..." autocomplete="off" spellcheck="false">
+                <span class="command-palette-esc-hint">ESC</span>
+                <button class="command-palette-close-btn" id="command-palette-close" title="Close"><i data-lucide="x"></i></button>
+            </div>
+            <div class="command-palette-content" id="command-palette-results">
+                <!-- Injected via CommandPaletteManager -->
+            </div>
+            <div class="command-palette-footer">
+                <div class="command-footer-hints">
+                    <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Navigate</span>
+                    <span><kbd>&crarr;</kbd> Select</span>
+                    <span><kbd>ESC</kbd> Close</span>
+                </div>
+                <div class="command-footer-brand">
+                    <span>CICR COMMAND SYSTEM</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Item Detail Modal -->
     <div class="modal-overlay" id="detail-modal">
         <div class="modal-content glass">

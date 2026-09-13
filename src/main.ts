@@ -610,7 +610,7 @@ class DatabaseManager {
 // ==========================================
 class DashboardManager {
     private activeCategory = 'all';
-    private searchQuery = '';
+    public searchQuery = '';
     public lastRenderedFingerprint = '';
     private listenersInitialized = false;
     private mobileSidebarOpen = false;
@@ -846,12 +846,25 @@ class DashboardManager {
                 }
             });
 
-            // Hide the header search box when on the inventory view to prevent double search bars
+            // Toggle body class for developers-view and inventory-view
+            if (targetId === 'developers-view') {
+                document.body.classList.add('view-developers-view');
+            } else {
+                document.body.classList.remove('view-developers-view');
+            }
+            if (targetId === 'inventory-view') {
+                document.body.classList.add('view-inventory-view');
+            } else {
+                document.body.classList.remove('view-inventory-view');
+            }
+
+            // Hide the header search box when on the inventory view OR developers view
             const headerSearchBox = document.querySelector('.header-search') as HTMLElement;
             if (headerSearchBox) {
-                if (targetId === 'inventory-view') {
-                    headerSearchBox.style.display = 'none';
+                if (targetId === 'inventory-view' || targetId === 'developers-view') {
+                    headerSearchBox.style.setProperty('display', 'none', 'important');
                 } else {
+                    headerSearchBox.style.removeProperty('display');
                     headerSearchBox.style.display = 'flex';
                 }
             }
@@ -893,6 +906,8 @@ class DashboardManager {
 
             closeMobileSidebar();
         };
+
+        (this as any).switchSection = switchSection;
 
         sidebarLinks.forEach(link => {
             link.addEventListener('click', (e) => {
@@ -985,14 +1000,20 @@ class DashboardManager {
             });
         }
 
-        // 5. Command palette mock trigger
+        // 5. Command palette & Universal search triggers
         const commandBtn = document.getElementById('sidebar-command-btn');
         if (commandBtn) {
-            commandBtn.addEventListener('click', () => {
-                const headerSearch = document.getElementById('header-search-input');
-                if (headerSearch) {
-                    headerSearch.focus();
-                }
+            commandBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                CommandPaletteManager.open();
+            });
+        }
+
+        const headerSearchBoxEl = document.getElementById('header-search-box') || document.querySelector('.header-search');
+        if (headerSearchBoxEl) {
+            headerSearchBoxEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                CommandPaletteManager.open();
             });
         }
 
@@ -1375,6 +1396,17 @@ class DashboardManager {
         });
 
         return card;
+    }
+
+    public static switchSection(targetId: string) {
+        if (window.dashboard && (window.dashboard as any).switchSection) {
+            (window.dashboard as any).switchSection(targetId);
+        } else {
+            const sideLink = document.querySelector(`.sidebar-nav-link[data-target="${targetId}"]`) as HTMLElement;
+            if (sideLink) {
+                sideLink.click();
+            }
+        }
     }
 }
 
@@ -2283,6 +2315,513 @@ class ModalManager {
         this.openDetailModal(selectedItem);
         ToastManager.show('Item Returned', `Restored ${rec.qty}x ${selectedItem.name}`, 'info');
         window.dashboard!.init();
+    }
+}
+
+// ==========================================
+// 5.5 Command Palette & Universal Search Manager
+// ==========================================
+class CommandPaletteManager {
+    private static isOpen = false;
+    private static selectedIndex = 0;
+    private static currentItems: Array<{
+        type: 'page' | 'component' | 'action';
+        title: string;
+        sub: string;
+        badge?: string;
+        badgeClass?: string;
+        icon: string;
+        action: () => void;
+    }> = [];
+
+    public static init() {
+        const modal = document.getElementById('command-palette-modal');
+        const input = document.getElementById('command-palette-input') as HTMLInputElement | null;
+        const closeBtn = document.getElementById('command-palette-close');
+        const headerSearch = document.getElementById('header-search-box') || document.querySelector('.header-search');
+        const sidebarCommandBtn = document.getElementById('sidebar-command-btn');
+
+        if (sidebarCommandBtn) {
+            sidebarCommandBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.open();
+            });
+        }
+
+        if (headerSearch) {
+            headerSearch.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.open();
+            });
+        }
+
+        // Global shortcut Ctrl+K or Cmd+K
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                if (this.isOpen) {
+                    this.close();
+                } else {
+                    this.open();
+                }
+            } else if (e.key === 'Escape' && this.isOpen) {
+                this.close();
+            }
+        });
+
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.close();
+                }
+            });
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.close());
+        }
+
+        if (input) {
+            input.addEventListener('input', () => {
+                this.renderResults(input.value.trim());
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.navigate(1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.navigate(-1);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.executeSelected();
+                }
+            });
+        }
+    }
+
+    public static open(initialQuery: string = '') {
+        const modal = document.getElementById('command-palette-modal');
+        const input = document.getElementById('command-palette-input') as HTMLInputElement | null;
+        if (!modal) return;
+
+        this.isOpen = true;
+        modal.classList.add('active');
+
+        if (input) {
+            input.value = initialQuery;
+            setTimeout(() => input.focus(), 60);
+        }
+
+        this.renderResults(initialQuery);
+    }
+
+    public static close() {
+        const modal = document.getElementById('command-palette-modal');
+        if (!modal) return;
+        this.isOpen = false;
+        modal.classList.remove('active');
+    }
+
+    private static navigate(direction: number) {
+        if (this.currentItems.length === 0) return;
+        this.selectedIndex = (this.selectedIndex + direction + this.currentItems.length) % this.currentItems.length;
+        this.highlightSelected();
+    }
+
+    private static highlightSelected() {
+        const items = document.querySelectorAll('.command-item');
+        items.forEach((item, idx) => {
+            if (idx === this.selectedIndex) {
+                item.classList.add('selected');
+                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+
+    private static executeSelected() {
+        if (this.currentItems[this.selectedIndex]) {
+            this.currentItems[this.selectedIndex].action();
+        }
+    }
+
+    public static renderResults(query: string) {
+        const container = document.getElementById('command-palette-results');
+        if (!container) return;
+
+        this.selectedIndex = 0;
+        this.currentItems = [];
+
+        const q = query.toLowerCase().trim();
+        const role = ModalManager.getCurrentRole();
+
+        // 1. Pages definition
+        const pages = [
+            {
+                id: 'dashboard-view',
+                title: 'Dashboard Overview',
+                keywords: ['dashboard', 'home', 'main', 'overview', 'stats', 'analytics'],
+                sub: 'System metrics, active loans & quick stats',
+                icon: 'layout-dashboard',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('dashboard-view');
+                }
+            },
+            {
+                id: 'inventory-view',
+                title: 'Inventory Vault',
+                keywords: ['inventory', 'vault', 'components', 'hardware', 'stock', 'parts', 'items', 'borrow', 'return'],
+                sub: 'Browse & request microcontrollers, sensors, modules & tools',
+                icon: 'package',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('inventory-view');
+                }
+            },
+            {
+                id: 'developers-view',
+                title: 'Meet The Developers',
+                keywords: ['developers', 'devs', 'team', 'creators', 'mentors', 'guidance', 'gunjan', 'aryan', 'dhruvi', 'vardaan', 'contact'],
+                sub: 'Under The Guidance of & Core Development Team',
+                icon: 'terminal',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('developers-view');
+                }
+            },
+            {
+                id: 'projects-view',
+                title: 'Projects Showcase',
+                keywords: ['projects', 'showcase', 'research', 'innovations', 'robotics', 'portfolio', 'hardware'],
+                sub: 'Robotics club research projects and innovations',
+                icon: 'folder-git-2',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('projects-view');
+                }
+            },
+            {
+                id: 'meetings-view',
+                title: 'Team Meetings',
+                keywords: ['meetings', 'schedule', 'agenda', 'minutes', 'discussion', 'lab meet'],
+                sub: 'Lab meetings schedule, agendas, and logs',
+                icon: 'users',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('meetings-view');
+                }
+            },
+            {
+                id: 'events-view',
+                title: 'Hackathons & Events',
+                keywords: ['events', 'hackathons', 'competitions', 'workshops', 'calendar'],
+                sub: 'Upcoming robotics competitions and workshops',
+                icon: 'calendar',
+                badge: 'PAGE',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('events-view');
+                }
+            }
+        ];
+
+        if (role === 'ADMIN') {
+            pages.push({
+                id: 'admin-view',
+                title: 'Admin Management Portal',
+                keywords: ['admin', 'portal', 'users', 'approvals', 'members', 'permissions', 'audit', 'logs', 'root', 'master'],
+                sub: 'Manage members, review borrow approvals & audit logs',
+                icon: 'shield-check',
+                badge: 'ADMIN',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('admin-view');
+                }
+            });
+        }
+
+        // Actions
+        const actions = [
+            {
+                title: 'Audit Logs & Notifications',
+                keywords: ['notifications', 'logs', 'history', 'activity', 'alerts', 'drawer'],
+                sub: 'View system notifications and loan history',
+                icon: 'bell',
+                badge: 'ACTION',
+                action: () => {
+                    this.close();
+                    ModalManager.openLogsDrawer();
+                }
+            },
+            {
+                title: 'Reset Password',
+                keywords: ['password', 'reset', 'change password', 'credentials', 'security', 'key'],
+                sub: 'Update your account login password',
+                icon: 'key-round',
+                badge: 'SECURITY',
+                action: () => {
+                    this.close();
+                    ModalManager.open('reset-password-modal');
+                }
+            },
+            {
+                title: 'Theme: Cyber Neon',
+                keywords: ['theme', 'dark', 'cyber', 'neon', 'blue', 'cyan', 'mode'],
+                sub: 'Switch to signature dark cyan neon aesthetic',
+                icon: 'zap',
+                badge: 'THEME',
+                action: () => {
+                    this.close();
+                    ThemeManager.applyTheme('cyberpunk');
+                }
+            },
+            {
+                title: 'Theme: Clean Light',
+                keywords: ['theme', 'light', 'day', 'white', 'bright'],
+                sub: 'Switch to daylight high-contrast theme',
+                icon: 'sun',
+                badge: 'THEME',
+                action: () => {
+                    this.close();
+                    ThemeManager.applyTheme('light');
+                }
+            },
+            {
+                title: 'Theme: Cherry Blossom',
+                keywords: ['theme', 'sakura', 'pink', 'cherry blossom', 'pastel'],
+                sub: 'Switch to pastel sakura blossom theme',
+                icon: 'sparkles',
+                badge: 'THEME',
+                action: () => {
+                    this.close();
+                    ThemeManager.applyTheme('sakura');
+                }
+            }
+        ];
+
+        if (role === 'ADMIN') {
+            actions.unshift({
+                title: 'Register New Hardware Component',
+                keywords: ['add', 'new component', 'create', 'register', 'inventory item', 'hardware'],
+                sub: 'Add fresh hardware component to vault stock',
+                icon: 'plus-circle',
+                badge: 'ADMIN',
+                action: () => {
+                    this.close();
+                    ModalManager.open('add-item-modal');
+                }
+            });
+        }
+
+        // Filter Pages
+        const matchingPages = pages.filter(p => {
+            if (!q) return true;
+            return p.title.toLowerCase().includes(q) ||
+                   p.sub.toLowerCase().includes(q) ||
+                   p.keywords.some(k => k.includes(q));
+        });
+
+        // Filter Actions
+        const matchingActions = actions.filter(a => {
+            if (!q) return false;
+            return a.title.toLowerCase().includes(q) ||
+                   a.sub.toLowerCase().includes(q) ||
+                   a.keywords.some(k => k.includes(q));
+        });
+
+        // Filter Components from inventory
+        const matchingComponents = (inventory || []).filter(item => {
+            if (!q) return false;
+            const tagsStr = (item.tags || []).join(' ').toLowerCase();
+            return item.name.toLowerCase().includes(q) ||
+                   (item.category || '').toLowerCase().includes(q) ||
+                   (item.specs || '').toLowerCase().includes(q) ||
+                   (item.location || '').toLowerCase().includes(q) ||
+                   tagsStr.includes(q);
+        }).slice(0, 12);
+
+        let html = '';
+
+        // Render matching pages
+        if (matchingPages.length > 0) {
+            html += `<div class="command-group-heading">PAGES & WORKSPACES</div>`;
+            matchingPages.forEach(p => {
+                const itemIndex = this.currentItems.length;
+                this.currentItems.push({
+                    type: 'page',
+                    title: p.title,
+                    sub: p.sub,
+                    badge: p.badge,
+                    badgeClass: 'command-badge-page',
+                    icon: p.icon,
+                    action: p.action
+                });
+
+                html += `
+                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
+                        <div class="command-item-icon"><i data-lucide="${p.icon}"></i></div>
+                        <div class="command-item-body">
+                            <div class="command-item-title">${this.escapeHtml(p.title)}</div>
+                            <div class="command-item-sub">${this.escapeHtml(p.sub)}</div>
+                        </div>
+                        <span class="command-item-badge command-badge-page">${p.badge}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Render matching components
+        if (matchingComponents.length > 0) {
+            html += `<div class="command-group-heading">HARDWARE INVENTORY (${matchingComponents.length})</div>`;
+            matchingComponents.forEach(item => {
+                const itemIndex = this.currentItems.length;
+                const borrowedSum = (item.borrowedBy || []).reduce((sum, rec) => sum + rec.qty, 0);
+                const available = typeof item.availableQuantity === 'number'
+                    ? item.availableQuantity
+                    : Math.max(0, item.quantity - borrowedSum);
+                const isOutOfStock = available === 0;
+
+                const stockBadge = isOutOfStock ? 'OUT OF STOCK' : `${available} AVAILABLE`;
+                const badgeClass = isOutOfStock ? 'command-badge-out' : 'command-badge-stock';
+                const subText = `${item.category.toUpperCase()} • Location: ${item.location || 'Lab Shelf'} • ${item.specs || ''}`;
+
+                this.currentItems.push({
+                    type: 'component',
+                    title: item.name,
+                    sub: subText,
+                    badge: stockBadge,
+                    badgeClass,
+                    icon: 'cpu',
+                    action: () => {
+                        this.close();
+                        DashboardManager.switchSection('inventory-view');
+                        setTimeout(() => {
+                            const searchInp = document.getElementById('search-input') as HTMLInputElement;
+                            if (searchInp && window.dashboard) {
+                                searchInp.value = item.name;
+                                window.dashboard.searchQuery = item.name.toLowerCase();
+                                window.dashboard.renderInventory();
+                            }
+                            ModalManager.openDetailModal(item);
+                        }, 120);
+                    }
+                });
+
+                html += `
+                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
+                        <div class="command-item-icon"><i data-lucide="cpu"></i></div>
+                        <div class="command-item-body">
+                            <div class="command-item-title">${this.escapeHtml(item.name)}</div>
+                            <div class="command-item-sub">${this.escapeHtml(subText)}</div>
+                        </div>
+                        <span class="command-item-badge ${badgeClass}">${stockBadge}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Render matching actions
+        if (matchingActions.length > 0) {
+            html += `<div class="command-group-heading">ACTIONS & SYSTEM</div>`;
+            matchingActions.forEach(a => {
+                const itemIndex = this.currentItems.length;
+                this.currentItems.push({
+                    type: 'action',
+                    title: a.title,
+                    sub: a.sub,
+                    badge: a.badge,
+                    badgeClass: 'command-badge-page',
+                    icon: a.icon,
+                    action: a.action
+                });
+
+                html += `
+                    <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
+                        <div class="command-item-icon"><i data-lucide="${a.icon}"></i></div>
+                        <div class="command-item-body">
+                            <div class="command-item-title">${this.escapeHtml(a.title)}</div>
+                            <div class="command-item-sub">${this.escapeHtml(a.sub)}</div>
+                        </div>
+                        <span class="command-item-badge command-badge-page">${a.badge}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // Render Fallback "Search in Inventory" if user typed something
+        if (q) {
+            const itemIndex = this.currentItems.length;
+            this.currentItems.push({
+                type: 'action',
+                title: `Filter inventory for "${query}"`,
+                sub: 'Open Inventory Vault and filter all matching components',
+                badge: 'SEARCH',
+                badgeClass: 'command-badge-stock',
+                icon: 'search',
+                action: () => {
+                    this.close();
+                    DashboardManager.switchSection('inventory-view');
+                    setTimeout(() => {
+                        const searchInp = document.getElementById('search-input') as HTMLInputElement;
+                        if (searchInp && window.dashboard) {
+                            searchInp.value = query;
+                            window.dashboard.searchQuery = query.toLowerCase();
+                            window.dashboard.renderInventory();
+                            searchInp.focus();
+                        }
+                    }, 120);
+                }
+            });
+
+            html += `
+                <div class="command-group-heading">DIRECT SEARCH</div>
+                <div class="command-item ${itemIndex === 0 ? 'selected' : ''}" data-index="${itemIndex}">
+                    <div class="command-item-icon"><i data-lucide="search"></i></div>
+                    <div class="command-item-body">
+                        <div class="command-item-title">Search Vault for <em>"${this.escapeHtml(query)}"</em></div>
+                        <div class="command-item-sub">Switch to Inventory Vault with this keyword</div>
+                    </div>
+                    <span class="command-item-badge command-badge-stock">ENTER &rarr;</span>
+                </div>
+            `;
+        }
+
+        if (this.currentItems.length === 0) {
+            html = `
+                <div class="command-empty-state">
+                    <i data-lucide="search-x" style="width:28px;height:28px;display:block;margin:0 auto 10px auto;color:#64748b;"></i>
+                    No matching components, pages, or commands found for "${this.escapeHtml(query)}".
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+        lucide.createIcons();
+
+        // Attach click listeners to all rendered items
+        container.querySelectorAll('.command-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = Number((el as HTMLElement).dataset.index);
+                if (this.currentItems[idx]) {
+                    this.currentItems[idx].action();
+                }
+            });
+        });
+    }
+
+    private static escapeHtml(str: string): string {
+        const div = document.createElement('div');
+        div.innerText = str;
+        return div.innerHTML;
     }
 }
 
@@ -4308,6 +4847,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.init();
     DatabaseManager.init();
     ModalManager.init();
+    CommandPaletteManager.init();
     AuthManager.init();
     AdminManager.init();
     DatabaseManager.startAutoSync(6000);
