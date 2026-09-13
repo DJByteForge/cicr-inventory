@@ -849,14 +849,15 @@ class DashboardManager {
             // Toggle body classes for current view
             document.body.classList.toggle('view-dashboard-view', targetId === 'dashboard-view');
             document.body.classList.toggle('view-developers-view', targetId === 'developers-view');
+            document.body.classList.toggle('view-admin-view', targetId === 'admin-view');
             document.body.classList.toggle('view-inventory-view', targetId === 'inventory-view');
 
-            // Hide the header search box and sidebar command palette button when on dashboard or developers view
+            // Hide the header search box when on dashboard, developers, admin, or inventory view
             const headerSearchBox = document.querySelector('.header-search') as HTMLElement;
             const sidebarCommandBtn = document.getElementById('sidebar-command-btn');
 
             if (headerSearchBox) {
-                if (targetId === 'dashboard-view' || targetId === 'developers-view' || targetId === 'inventory-view') {
+                if (targetId === 'dashboard-view' || targetId === 'developers-view' || targetId === 'admin-view' || targetId === 'inventory-view') {
                     headerSearchBox.style.setProperty('display', 'none', 'important');
                 } else {
                     headerSearchBox.style.removeProperty('display');
@@ -871,6 +872,11 @@ class DashboardManager {
                     sidebarCommandBtn.style.removeProperty('display');
                     sidebarCommandBtn.style.display = 'flex';
                 }
+            }
+
+            // Refresh Lucide icons if needed
+            if (typeof lucide !== 'undefined' && lucide.createIcons) {
+                lucide.createIcons();
             }
 
             // Update sidebar link active class
