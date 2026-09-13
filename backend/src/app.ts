@@ -55,7 +55,29 @@ app.use('/api/borrow', borrowRoutes);
 app.use('/api', dashboardRoutes); // Exposes GET /api/stats and GET /api/audit
 
 app.get('/api/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'success', message: 'CICR Inventory API is live! 🚀' });
+  res.status(200).json({
+    status: 'success',
+    message: 'CICR Inventory API is live! 🚀',
+    version: '2.7.1',
+    smtp_configured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASS),
+    smtp_user: process.env.SMTP_USER ? process.env.SMTP_USER.replace(/(.{3})(.*)(@.*)/, '$1***$3') : null,
+  });
+});
+
+app.get('/api/test-email', async (req: Request, res: Response) => {
+  const target = (req.query.to as string) || 'vardaansaxena096@gmail.com';
+  try {
+    const { sendLoginOtpEmail, isSmtpConfigured } = await import('./services/emailService');
+    const isConfigured = isSmtpConfigured();
+    const result = await sendLoginOtpEmail(target, 'Diagnostic Test', '999888');
+    res.json({
+      target,
+      smtp_configured: isConfigured,
+      result
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export { dbRead };
