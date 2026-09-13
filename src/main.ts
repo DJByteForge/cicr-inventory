@@ -846,26 +846,30 @@ class DashboardManager {
                 }
             });
 
-            // Toggle body class for developers-view and inventory-view
-            if (targetId === 'developers-view') {
-                document.body.classList.add('view-developers-view');
-            } else {
-                document.body.classList.remove('view-developers-view');
-            }
-            if (targetId === 'inventory-view') {
-                document.body.classList.add('view-inventory-view');
-            } else {
-                document.body.classList.remove('view-inventory-view');
-            }
+            // Toggle body classes for current view
+            document.body.classList.toggle('view-dashboard-view', targetId === 'dashboard-view');
+            document.body.classList.toggle('view-developers-view', targetId === 'developers-view');
+            document.body.classList.toggle('view-inventory-view', targetId === 'inventory-view');
 
-            // Hide the header search box when on the inventory view OR developers view
+            // Hide the header search box and sidebar command palette button when on dashboard or developers view
             const headerSearchBox = document.querySelector('.header-search') as HTMLElement;
+            const sidebarCommandBtn = document.getElementById('sidebar-command-btn');
+
             if (headerSearchBox) {
-                if (targetId === 'inventory-view' || targetId === 'developers-view') {
+                if (targetId === 'dashboard-view' || targetId === 'developers-view' || targetId === 'inventory-view') {
                     headerSearchBox.style.setProperty('display', 'none', 'important');
                 } else {
                     headerSearchBox.style.removeProperty('display');
                     headerSearchBox.style.display = 'flex';
+                }
+            }
+
+            if (sidebarCommandBtn) {
+                if (targetId === 'dashboard-view' || targetId === 'developers-view') {
+                    sidebarCommandBtn.style.setProperty('display', 'none', 'important');
+                } else {
+                    sidebarCommandBtn.style.removeProperty('display');
+                    sidebarCommandBtn.style.display = 'flex';
                 }
             }
 
@@ -888,11 +892,17 @@ class DashboardManager {
                     'events-view': 'EVENTS',
                     'inventory-view': 'INVENTORY',
                     'developers-view': 'MEET THE DEVELOPERS',
-                    'admin-view': 'ADMIN PORTAL'
+                    'admin-view': 'ADMIN MANAGEMENT'
                 };
-                breadcrumbActive.innerText = nameMap[targetId] || 'WORKSPACE';
+                breadcrumbActive.textContent = nameMap[targetId] || targetId.toUpperCase();
             }
 
+            // If switching to inventory-view, trigger render/refresh
+            if (targetId === 'inventory-view') {
+                this.renderInventory();
+            }
+
+            // If switching to admin-view, load admin data
             if (targetId === 'admin-view') {
                 if (ModalManager.getCurrentRole() !== 'ADMIN') {
                     ToastManager.show('Access Restricted', 'Admin privileges required to access Admin Portal.', 'warning');
@@ -908,6 +918,7 @@ class DashboardManager {
         };
 
         (this as any).switchSection = switchSection;
+        switchSection('dashboard-view');
 
         sidebarLinks.forEach(link => {
             link.addEventListener('click', (e) => {

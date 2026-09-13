@@ -8730,10 +8730,20 @@ body:not(.user-is-admin) #btn-modal-delete-item {
 }
 
 /* ===================================================
-   HIDE HEADER SEARCH ON MEET THE DEVELOPERS PAGE
+   HIDE SEARCH BUTTON & COMMAND PALETTE ON DASHBOARD & DEVELOPERS PAGE
    =================================================== */
+body.view-dashboard-view .header-search,
 body.view-developers-view .header-search,
-body.view-inventory-view .header-search {
+body.view-inventory-view .header-search,
+body:has(#dashboard-view.active) .header-search,
+body:has(#developers-view.active) .header-search {
+    display: none !important;
+}
+
+body.view-dashboard-view #sidebar-command-btn,
+body.view-developers-view #sidebar-command-btn,
+body:has(#dashboard-view.active) #sidebar-command-btn,
+body:has(#developers-view.active) #sidebar-command-btn {
     display: none !important;
 }
 

@@ -292,7 +292,7 @@
                 </button>
 
                 <!-- Command Palette Button -->
-                <button class="sidebar-action-btn" id="sidebar-command-btn">
+                <button class="sidebar-action-btn" id="sidebar-command-btn" style="display: none !important;">
                     <div class="btn-left-content">
                         <i data-lucide="search" class="btn-icon"></i>
                         <div class="btn-text-stack">
@@ -316,10 +316,6 @@
                         <a href="#" class="sidebar-nav-link" id="side-nav-inventory" data-target="inventory-view">
                             <i data-lucide="layers"></i>
                             <span>Inventory</span>
-                        </a>
-                        <a href="#" class="sidebar-nav-link" id="side-nav-developers" data-target="developers-view">
-                            <i data-lucide="code-2"></i>
-                            <span>Meet The Developers</span>
                         </a>
                         <a href="#" class="sidebar-nav-link" id="side-nav-admin" data-target="admin-view" style="display: none !important;">
                             <i data-lucide="shield-check"></i>
@@ -361,6 +357,20 @@
                         </details>
                     </div>
                 </div>
+
+                <!-- Miscellaneous Section -->
+                <div class="sidebar-section" style="margin-top: 14px;">
+                    <div class="sidebar-section-header">
+                        <span>MISCELLANEOUS</span>
+                        <i data-lucide="chevron-down" class="section-arrow"></i>
+                    </div>
+                    <div class="sidebar-nav-links">
+                        <a href="#" class="sidebar-nav-link" id="side-nav-developers" data-target="developers-view">
+                            <i data-lucide="code-2"></i>
+                            <span>Meet The Developers</span>
+                        </a>
+                    </div>
+                </div>
             </div>
 
 
@@ -400,7 +410,7 @@
                  </div>
                  
                  <div class="header-right">
-                     <div class="header-search" id="header-search-box" style="cursor: pointer;" title="Search components or jump to page (Ctrl + K)">
+                     <div class="header-search" id="header-search-box" style="display: none !important; cursor: pointer;" title="Search components or jump to page (Ctrl + K)">
                          <i data-lucide="search" class="search-icon"></i>
                          <input type="text" id="header-search-input" placeholder="Search components, jump to page..." readonly style="cursor: pointer;">
                          <span class="search-kbd">Ctrl K</span>
