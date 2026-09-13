@@ -53,7 +53,14 @@ export const getSmtpPass = (): string => {
   return (process.env.SMTP_PASS || '').replace(/\s+/g, '');
 };
 
-export const isSmtpConfigured = (): boolean => Boolean(getSmtpUser() && getSmtpPass());
+export const EMAILS_ENABLED = false;
+
+export const isSmtpConfigured = (): boolean => {
+  if (!EMAILS_ENABLED || process.env.DISABLE_ALL_EMAILS === 'true') {
+    return false;
+  }
+  return Boolean(getSmtpUser() && getSmtpPass());
+};
 
 let cachedTransporter: nodemailer.Transporter | null = null;
 let lastTransporterUser = '';
@@ -97,10 +104,22 @@ export const getTransporter = () => {
   return cachedTransporter;
 };
 
-// Transporter proxy
+// Transporter proxy with hard safety suppression switch
 const transporter = {
-  sendMail: (options: nodemailer.SendMailOptions) => getTransporter().sendMail(options),
-  verify: (callback?: any) => getTransporter().verify(callback)
+  sendMail: async (options: nodemailer.SendMailOptions) => {
+    if (!EMAILS_ENABLED || process.env.DISABLE_ALL_EMAILS === 'true') {
+      console.log(`[EMAIL DISPATCH SUPPRESSED] Outgoing mail to ${JSON.stringify(options.to)} blocked (all emails disabled).`);
+      return { messageId: '<suppressed@cicr.internal>', accepted: [], rejected: [], response: '250 Mock/Suppressed OK' } as any;
+    }
+    return getTransporter().sendMail(options);
+  },
+  verify: (callback?: any) => {
+    if (!EMAILS_ENABLED || process.env.DISABLE_ALL_EMAILS === 'true') {
+      if (typeof callback === 'function') callback(null, true);
+      return Promise.resolve(true);
+    }
+    return getTransporter().verify(callback);
+  }
 };
 
 export interface HolderSummary {
@@ -2037,10 +2056,6 @@ export const sendUserWelcomeWithTempPasswordEmail = async (
             <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ENROLLMENT NO:</td>
             <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${rollDisplay}</td>
           </tr>
-          <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">LAB BATCH:</td>
-            <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${batchDisplay}</td>
-          </tr>
         </table>
       </div>
 
@@ -2079,7 +2094,6 @@ export const sendUserWelcomeWithTempPasswordEmail = async (
         `Your account has been created on the CICR Robotics Inventory Vault.`,
         `Email: ${context.userEmail}`,
         `Enrollment No: ${rollDisplay}`,
-        `Lab Section Batch: ${batchDisplay}`,
         ...(hasTempPassword ? [
           ``,
           `TEMPORARY PASSWORD: ${context.tempPassword}`,

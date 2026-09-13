@@ -31,6 +31,10 @@ if (isRedisEnabled && REDIS_URL) {
     QUEUE_NAME,
     async (job) => {
       const { kind, mailOptions } = job.data;
+      if (process.env.DISABLE_ALL_EMAILS === 'true') {
+        console.log(`[EMAIL QUEUE] Dispatches suppressed per configuration. Skipping job ${job.id}.`);
+        return;
+      }
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: Number(process.env.SMTP_PORT) || 587,
