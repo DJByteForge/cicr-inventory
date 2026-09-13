@@ -1219,7 +1219,7 @@ class DashboardManager {
         const categoryLabel = catMap[item.category] || item.category;
         const isAdmin = ModalManager.getCurrentRole() === 'ADMIN';
         const deleteBtnHtml = isAdmin ? `
-            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(item.name)}" title="Delete Component from Inventory">
+            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(item.name)}" onclick="event.stopPropagation(); event.preventDefault(); window.adminDeleteItem('${item.id}', '${AdminManager.escapeHtml(item.name)}')" title="Delete Component from Inventory">
                 <i data-lucide="trash-2"></i>
             </button>
         ` : '';
@@ -2176,7 +2176,7 @@ class AuthManager {
             });
         }
 
-        this.updateAdminVisibility('MEMBER');
+        this.updateAdminVisibility(ModalManager.getCurrentRole());
         this.setupEventListeners();
         this.checkAuth();
     }
@@ -2767,6 +2767,7 @@ class AdminManager {
         window.adminReject = (id: string) => this.rejectUser(id);
         window.adminSetRole = (id: string, role: 'ADMIN' | 'MEMBER') => this.setRole(id, role);
         window.adminDeleteUser = (id: string, name: string) => this.deleteUser(id, name);
+        window.adminDeleteItem = (id: string, name: string) => this.promptDeleteItem(id, name);
 
         window.adminApproveHardware = (id: string) => this.approveHardware(id);
         window.adminRejectHardware = (id: string) => this.rejectHardware(id);
@@ -3367,10 +3368,11 @@ class AdminManager {
         if (!modal) return;
         if (targetName) targetName.innerText = itemName;
 
-        modal.style.display = 'flex';
+        modal.style.removeProperty('display');
+        modal.classList.add('active');
 
         const closeModal = () => {
-            modal.style.display = 'none';
+            modal.classList.remove('active');
         };
 
         if (cancelBtn) cancelBtn.onclick = closeModal;
@@ -4272,6 +4274,7 @@ declare global {
         adminReject?: (id: string) => void;
         adminSetRole?: (id: string, role: 'ADMIN' | 'MEMBER') => void;
         adminDeleteUser?: (id: string, name: string) => void;
+        adminDeleteItem?: (id: string, name: string) => void;
         adminApproveHardware?: (id: string) => void;
         adminRejectHardware?: (id: string) => void;
     }

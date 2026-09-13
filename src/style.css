@@ -8582,7 +8582,6 @@ body.theme-light .devs-clean-divider {
 body:not(.user-is-admin) .btn-card-delete-item,
 body:not(.user-is-admin) #btn-modal-delete-item {
     display: none !important;
-    pointer-events: none !important;
 }
 
 .btn-modal-delete {
