@@ -6764,7 +6764,9 @@ body.theme-sakura .log-item {
 .dev-social-btn svg {
     width: 15px;
     height: 15px;
-    transition: transform 0.2s ease, color 0.2s ease;
+    display: block;
+    stroke: currentColor;
+    transition: transform 0.2s ease, color 0.2s ease, stroke 0.2s ease;
 }
 
 .dev-social-btn:hover {
