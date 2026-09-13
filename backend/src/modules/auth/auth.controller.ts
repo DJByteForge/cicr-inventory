@@ -280,18 +280,14 @@ export const login = async (req: Request, res: Response) => {
       ? 'ADMIN'
       : (user.email.endsWith('@mail.jiit.ac.in') || user.email.endsWith('@jiit.ac.in') ? 'MEMBER' : approval.role);
 
-    // Enforce 10-minute gap to regenerate a new OTP
-    const cooldownMs = 10 * 60 * 1000; // 10 minutes
     const normEmail = user.email.toLowerCase();
     const existing = pendingLoginOtps.get(normEmail);
     const now = Date.now();
 
     let otp: string;
-    let remainingCooldownSeconds = 600;
 
-    if (existing && (now - existing.lastGeneratedAt < cooldownMs)) {
+    if (existing && now < existing.expiresAt) {
       otp = existing.otp;
-      remainingCooldownSeconds = Math.max(1, Math.ceil((existing.lastGeneratedAt + cooldownMs - now) / 1000));
       // Re-dispatch OTP email so the user always receives the code
       sendLoginOtpEmail(user.email, user.name, otp).catch((e) =>
         console.error('[EMAIL ERROR] Failed to send login OTP email on re-login:', e)
@@ -327,7 +323,7 @@ export const login = async (req: Request, res: Response) => {
       message: 'A 6-digit verification code has been dispatched to your email. Valid for 10 minutes.',
       email: user.email,
       name: user.name,
-      remainingCooldownSeconds
+      remainingCooldownSeconds: 15
     });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });

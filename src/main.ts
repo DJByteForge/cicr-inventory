@@ -2212,7 +2212,7 @@ class AuthManager {
             const data = await res.json();
 
             if (data.status === 'otp_required') {
-                this.showOtpModal(data.email || identifier, data.name, data.remainingCooldownSeconds || 600);
+                this.showOtpModal(data.email || identifier, data.name, data.remainingCooldownSeconds || 15);
                 ToastManager.show('Verification Code Sent', 'A 6-digit verification code (valid for 10 minutes) was dispatched to your email.', 'info');
                 return;
             }
@@ -2298,7 +2298,7 @@ class AuthManager {
         this.otpTimerInterval = setInterval(updateClock, 1000);
     }
 
-    private static startResendCooldown(seconds: number = 600) {
+    private static startResendCooldown(seconds: number = 15) {
         this.resendCooldownSeconds = seconds;
         if (this.resendCooldownInterval) clearInterval(this.resendCooldownInterval);
 
@@ -2373,10 +2373,10 @@ class AuthManager {
                     localStorage.setItem('cicr_user', JSON.stringify(data.user));
                 }
                 this.hideOtpModal();
-                const resolvedName = data.user?.name || this.pendingOtpEmail;
+                const resolvedName = data.user?.name || this.pendingOtpEmail || 'User';
                 const role = data.user?.role || 'MEMBER';
                 this.loginSuccess(resolvedName, role, data.user);
-                ToastManager.show('Authenticated', 'Access granted to CICR Inventory Vault.', 'success');
+                ToastManager.show('Access Granted', '2FA verification completed successfully.', 'success');
                 return;
             }
 
@@ -2395,7 +2395,7 @@ class AuthManager {
         if (this.resendCooldownSeconds > 0) {
             const mins = Math.floor(this.resendCooldownSeconds / 60);
             const secs = this.resendCooldownSeconds % 60;
-            this.showOtpError(`Please wait a 10-minute gap before requesting a new OTP (${mins}m ${secs}s remaining).`);
+            this.showOtpError(mins > 0 ? `Please wait ${mins}m ${secs}s before requesting a new code.` : `Please wait ${secs}s before requesting a new code.`);
             return;
         }
 
@@ -2415,15 +2415,15 @@ class AuthManager {
 
             if (res.ok && data.status === 'success') {
                 this.startOtpTimer();
-                this.startResendCooldown(data.remainingSeconds || 600);
+                this.startResendCooldown(data.remainingSeconds || 15);
                 this.showOtpSuccess(data.message || 'A fresh 10-minute verification code has been dispatched to your email.');
                 ToastManager.show('Code Resent', 'A fresh verification code has been dispatched to your email (valid for 10 minutes).', 'info');
                 return;
             }
 
             if (res.status === 429 || data.status === 'cooldown') {
-                this.startResendCooldown(data.remainingSeconds || 600);
-                this.showOtpError(data.message || 'Please wait a 10-minute gap before requesting a new OTP.');
+                this.startResendCooldown(data.remainingSeconds || 15);
+                this.showOtpError(data.message || 'Please wait before requesting a new OTP.');
                 return;
             }
 
