@@ -114,6 +114,14 @@ export const createItem = async (req: AuthRequest, res: Response) => {
     }
 
     const qty = Number(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ status: 'error', message: 'Quantity must be a positive number of at least 1.' });
+    }
+
+    const MAX_ITEM_QUANTITY = 500;
+    if (qty > MAX_ITEM_QUANTITY) {
+      return res.status(400).json({ status: 'error', message: `Quantity cannot exceed upper limit of ${MAX_ITEM_QUANTITY} units per entry.` });
+    }
 
     const { data: newItem, error } = await dbWrite
       .from('inventory')

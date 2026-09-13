@@ -2103,6 +2103,17 @@ class ModalManager {
             return;
         }
 
+        if (qty <= 0) {
+            ToastManager.show('Invalid Quantity', 'Total quantity must be at least 1.', 'warning');
+            return;
+        }
+
+        const MAX_QUANTITY_LIMIT = 500;
+        if (qty > MAX_QUANTITY_LIMIT) {
+            ToastManager.show('Quantity Exceeds Limit', `Maximum quantity per component entry is capped at ${MAX_QUANTITY_LIMIT} units.`, 'warning');
+            return;
+        }
+
         const submitBtn = document.getElementById('btn-add-submit') as HTMLButtonElement;
         const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
         if (submitBtn) {
