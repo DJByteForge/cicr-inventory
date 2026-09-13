@@ -17,6 +17,12 @@
       "role": "MEMBER",
       "approvedAt": "2026-09-13T07:02:21.076+00:00",
       "approvedBy": "ADMIN"
+    },
+    "992501030399@mail.jiit.ac.in": {
+      "status": "APPROVED",
+      "role": "MEMBER",
+      "approvedAt": "2026-09-13T08:20:16.467+00:00",
+      "approvedBy": "ADMIN"
     }
   },
   "purgedEmails": [
