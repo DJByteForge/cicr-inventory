@@ -18,7 +18,11 @@ export const DEFAULT_SENDER_EMAIL = 'cicrinventory@gmail.com';
 export const NO_REPLY_HEADER = '"CICR Inventory (No-Reply)" <noreply.cicrinventory@gmail.com>';
 export const SUPER_ADMIN_EMAILS = [
   'vardaansaxena096@gmail.com',
-  'cicrinventory@gmail.com'
+  'cicrinventory@gmail.com',
+  '992501030399@mail.jiit.ac.in',
+  '992401210050@mail.jiit.ac.in', // Gunjan Pal
+  '992401030123@mail.jiit.ac.in', // Dhruvi Gupta
+  '992401030154@mail.jiit.ac.in'  // Aryan Varshney
 ];
 
 

@@ -1458,31 +1458,88 @@ class ModalManager {
         selectedItem = null;
     }
 
+    public static isDesignatedAdminUser(email?: string, name?: string, username?: string): boolean {
+        const normEmail = (email || '').toLowerCase().trim();
+        const normName = (name || '').toLowerCase().trim();
+        const normUser = (username || '').toLowerCase().trim();
+
+        // 1. Gunjan Pal
+        if (
+            normEmail === '992401210050@mail.jiit.ac.in' ||
+            normEmail.includes('992401210050') ||
+            normEmail.includes('gunjan') ||
+            normName.includes('gunjan') ||
+            normUser.includes('gunjan')
+        ) {
+            return true;
+        }
+
+        // 2. Dhruvi Gupta
+        if (
+            normEmail === '992401030123@mail.jiit.ac.in' ||
+            normEmail.includes('992401030123') ||
+            normEmail.includes('dhruvi') ||
+            normName.includes('dhruvi') ||
+            normUser.includes('dhruvi')
+        ) {
+            return true;
+        }
+
+        // 3. Aryan Varshney
+        if (
+            normEmail === '992401030154@mail.jiit.ac.in' ||
+            normEmail.includes('992401030154') ||
+            normEmail.includes('aryan') ||
+            normName.includes('aryan') ||
+            normUser.includes('aryan')
+        ) {
+            return true;
+        }
+
+        // 4. Vardaan Saxena / Master Admins
+        if (
+            normEmail === 'vardaansaxena096@gmail.com' ||
+            normEmail === 'cicrinventory@gmail.com' ||
+            normEmail === '992501030399@mail.jiit.ac.in' ||
+            normEmail.includes('992501030399') ||
+            normEmail.includes('vardaan') ||
+            normName.includes('vardaan') ||
+            normUser.includes('vardaan') ||
+            normUser === 'srvkiller09' ||
+            normUser === ADMIN_USERNAME.toLowerCase()
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
     public static getCurrentRole(): UserRole {
         const userStr = localStorage.getItem('cicr_user');
         if (userStr) {
             try {
                 const user = JSON.parse(userStr);
                 const email = (user.email || '').toLowerCase().trim();
+                const name = (user.name || '').toLowerCase().trim();
+                const username = (user.username || '').toLowerCase().trim();
+
+                // Designated Admins: Gunjan, Dhruvi, Aryan & Vardaan ALWAYS have full ADMIN powers!
+                if (this.isDesignatedAdminUser(email, name, username)) {
+                    return 'ADMIN';
+                }
+
+                // Verified DB admin role
+                if (user.role === 'ADMIN') {
+                    return 'ADMIN';
+                }
 
                 // Blocked from admin
                 if (email === 'mahakkatahara.mk@gmail.com') {
                     return 'MEMBER';
                 }
 
-                // Master Admin accounts
-                if (email === 'vardaansaxena096@gmail.com' || email === 'cicrinventory@gmail.com') {
-                    return 'ADMIN';
-                }
-
-                // Official JIIT student accounts are NEVER Admins
                 if (email.endsWith('@mail.jiit.ac.in') || email.endsWith('@jiit.ac.in')) {
                     return 'MEMBER';
-                }
-
-                // Verified DB admin role
-                if (user.role === 'ADMIN') {
-                    return 'ADMIN';
                 }
 
                 return 'MEMBER';
@@ -1492,15 +1549,12 @@ class ModalManager {
         const storedRole = localStorage.getItem('cicr_role');
         const authName = (localStorage.getItem('cicr_auth') || '').toLowerCase().trim();
 
+        if (this.isDesignatedAdminUser(authName, authName, authName)) {
+            return 'ADMIN';
+        }
+
         if (storedRole === 'ADMIN') {
-            if (
-                authName === 'vardaansaxena096@gmail.com' ||
-                authName === 'cicrinventory@gmail.com' ||
-                authName === 'srvkiller09' ||
-                authName === ADMIN_USERNAME.toLowerCase()
-            ) {
-                return 'ADMIN';
-            }
+            return 'ADMIN';
         }
 
         return 'MEMBER';
@@ -2529,12 +2583,7 @@ class AuthManager {
         let effectiveRole: 'ADMIN' | 'MEMBER' = 'MEMBER';
         const normEmail = (_userObj?.email || '').toLowerCase().trim();
 
-        const isDhruvi = normEmail.includes('dhruvi') || username.toLowerCase().includes('dhruvi');
-        const isAryan = normEmail.includes('aryan') || username.toLowerCase().includes('aryan');
-        const isGunjan = normEmail.includes('gunjan') || username.toLowerCase().includes('gunjan');
-        const isMaster = normEmail === 'vardaansaxena096@gmail.com' || normEmail === 'cicrinventory@gmail.com' || normEmail === '992501030399@mail.jiit.ac.in' || normEmail.includes('vardaan') || username.toLowerCase().includes('vardaan');
-
-        if (isMaster || isDhruvi || isAryan || isGunjan || role === 'ADMIN') {
+        if (ModalManager.isDesignatedAdminUser(normEmail, _userObj?.name, username) || role === 'ADMIN') {
             effectiveRole = 'ADMIN';
         } else {
             effectiveRole = 'MEMBER';
