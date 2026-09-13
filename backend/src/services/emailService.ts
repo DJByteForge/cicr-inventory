@@ -49,15 +49,22 @@ export const getSmtpPass = (): string => {
 
 export const isSmtpConfigured = (): boolean => Boolean(getSmtpUser() && getSmtpPass());
 
-// Configure transport using environment variables or verified credentials
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  auth: {
-    user: getSmtpUser(),
-    pass: getSmtpPass(),
-  },
-});
+export const getTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT) || 587,
+    auth: {
+      user: getSmtpUser(),
+      pass: getSmtpPass(),
+    },
+  });
+};
+
+// Dynamic transporter proxy to ensure latest runtime environment variables are always used
+const transporter = {
+  sendMail: (options: nodemailer.SendMailOptions) => getTransporter().sendMail(options),
+  verify: (callback?: any) => getTransporter().verify(callback)
+};
 
 export interface HolderSummary {
   borrower_name: string;

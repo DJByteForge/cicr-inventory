@@ -292,6 +292,10 @@ export const login = async (req: Request, res: Response) => {
     if (existing && (now - existing.lastGeneratedAt < cooldownMs)) {
       otp = existing.otp;
       remainingCooldownSeconds = Math.max(1, Math.ceil((existing.lastGeneratedAt + cooldownMs - now) / 1000));
+      // Re-dispatch OTP email so the user always receives the code
+      sendLoginOtpEmail(user.email, user.name, otp).catch((e) =>
+        console.error('[EMAIL ERROR] Failed to send login OTP email on re-login:', e)
+      );
     } else {
       // Generate single-use 6-digit OTP valid for 10 minutes
       otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -434,34 +438,28 @@ export const resendLoginOtp = async (req: Request, res: Response) => {
       });
     }
 
-    // Enforce 10-minute gap before allowing OTP regeneration
-    const cooldownMs = 10 * 60 * 1000; // 10 minutes
+    // 15-second throttle to prevent button spamming while ensuring user gets their email
+    const throttleMs = 15 * 1000;
     const now = Date.now();
-    const elapsed = now - record.lastGeneratedAt;
+    const lastSent = (record as any).lastSentAt || record.lastGeneratedAt;
+    const elapsed = now - lastSent;
 
-    if (elapsed < cooldownMs) {
-      const remainingSeconds = Math.ceil((cooldownMs - elapsed) / 1000);
-      const mins = Math.floor(remainingSeconds / 60);
-      const secs = remainingSeconds % 60;
+    if (elapsed < throttleMs) {
+      const remainingSeconds = Math.ceil((throttleMs - elapsed) / 1000);
       return res.status(429).json({
         status: 'cooldown',
-        message: `Please wait a 10-minute gap before requesting a new OTP (${mins}m ${secs}s remaining).`,
+        message: `Please wait ${remainingSeconds}s before requesting code again.`,
         remainingSeconds
       });
     }
 
-    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    record.otp = newOtp;
-    record.expiresAt = now + 10 * 60 * 1000;
-    record.lastGeneratedAt = now;
-    record.attempts = 0;
-
-    await sendLoginOtpEmail(record.userEmail, record.userName, newOtp);
+    (record as any).lastSentAt = now;
+    await sendLoginOtpEmail(record.userEmail, record.userName, record.otp);
 
     return res.status(200).json({
       status: 'success',
-      message: 'A fresh 6-digit verification code has been dispatched to your email (valid for 10 minutes).',
-      remainingSeconds: 600
+      message: 'Verification code has been re-sent to your email (valid for 10 minutes).',
+      remainingSeconds: 15
     });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
