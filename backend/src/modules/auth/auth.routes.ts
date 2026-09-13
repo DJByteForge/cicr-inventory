@@ -9,7 +9,11 @@ import {
   approveUser,
   rejectUser,
   changeUserRole,
-  deleteUser
+  deleteUser,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  adminCreateUser
 } from './auth.controller';
 import { sendOtp, verifyOtp } from './authOtpController';
 import { authenticateToken, requireAdmin } from '../../middleware/auth.middleware';
@@ -24,8 +28,14 @@ router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.get('/profile', authenticateToken, getProfile);
 
+// Password recovery and update routes
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
+router.post('/change-password', authenticateToken, changePassword);
+
 // Admin user approval and member management routes
 router.get('/admin/users', authenticateToken, requireAdmin, listUsersForAdmin);
+router.post('/admin/users/create', authenticateToken, requireAdmin, adminCreateUser);
 router.post('/admin/users/:id/approve', authenticateToken, requireAdmin, approveUser);
 router.post('/admin/users/:id/reject', authenticateToken, requireAdmin, rejectUser);
 router.post('/admin/users/:id/role', authenticateToken, requireAdmin, changeUserRole);

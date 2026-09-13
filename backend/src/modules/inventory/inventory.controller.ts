@@ -41,11 +41,16 @@ export const getItems = async (req: Request, res: Response) => {
     let query = dbRead.from('inventory').select('*').order('created_at', { ascending: false });
 
     if (category) {
-      query = query.eq('category', category as string);
+      const catStr = String(category).trim();
+      if (catStr.toLowerCase() === 'microcontrollers' || catStr.toLowerCase() === 'mcu') {
+        query = query.ilike('category', '%controller%');
+      } else {
+        query = query.ilike('category', `%${catStr}%`);
+      }
     }
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`);
     }
 
     const { data: items, error } = await query;
@@ -62,7 +67,12 @@ export const getItems = async (req: Request, res: Response) => {
 // GET /api/items/categories (List distinct categories)
 export const getCategories = async (req: Request, res: Response) => {
   try {
-    const categories = ['Controllers', 'Sensors', 'Power', 'Actuators', 'Tools'];
+    const { data, error } = await dbRead.from('inventory').select('category');
+    if (!error && data && data.length > 0) {
+      const distinct = Array.from(new Set(data.map((i: any) => i.category))).filter(Boolean);
+      return res.status(200).json({ status: 'success', data: distinct });
+    }
+    const categories = ['Sensors', 'Controllers', 'Actuators', 'Power', 'Tools'];
     return res.status(200).json({ status: 'success', data: categories });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });

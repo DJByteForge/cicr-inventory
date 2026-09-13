@@ -522,22 +522,34 @@
                                    </div>
                                </div>
 
-                                <!-- Quick Stats Panel inside Explorer Layout -->
+                                <!-- Quick Stats Panel inside Explorer Layout (Interactive Filter Bubbles) -->
                                 <div class="explorer-stats-row">
-                                    <div class="stat-bubble-new">
-                                        <span class="bubble-label"><i data-lucide="boxes"></i> Total Vaulted</span>
+                                    <div class="stat-bubble-new" id="stat-filter-all" data-stock-filter="all" title="Click to show all vaulted hardware">
+                                        <div class="stat-bubble-header">
+                                            <span class="bubble-label"><i data-lucide="boxes"></i> Total Vaulted</span>
+                                            <span class="stat-click-hint">ALL</span>
+                                        </div>
                                         <span class="bubble-value" id="stat-total">0</span>
                                     </div>
-                                    <div class="stat-bubble-new">
-                                        <span class="bubble-label"><i data-lucide="shopping-cart"></i> Active Loans</span>
+                                    <div class="stat-bubble-new" id="stat-filter-borrowed" data-stock-filter="borrowed" title="Click to show only items with active loans">
+                                        <div class="stat-bubble-header">
+                                            <span class="bubble-label"><i data-lucide="shopping-cart"></i> Active Loans</span>
+                                            <span class="stat-click-hint">FILTER</span>
+                                        </div>
                                         <span class="bubble-value text-purple" id="stat-borrowed">0</span>
                                     </div>
-                                    <div class="stat-bubble-new">
-                                        <span class="bubble-label"><i data-lucide="alert-circle"></i> Low Reserves</span>
+                                    <div class="stat-bubble-new" id="stat-filter-low" data-stock-filter="low" title="Click to show only items with low reserves (≤ 2 units)">
+                                        <div class="stat-bubble-header">
+                                            <span class="bubble-label"><i data-lucide="alert-circle"></i> Low Reserves</span>
+                                            <span class="stat-click-hint">FILTER</span>
+                                        </div>
                                         <span class="bubble-value text-yellow" id="stat-low">0</span>
                                     </div>
-                                    <div class="stat-bubble-new">
-                                        <span class="bubble-label"><i data-lucide="package-x"></i> Out of Stock</span>
+                                    <div class="stat-bubble-new" id="stat-filter-out" data-stock-filter="out" title="Click to show only out of stock items">
+                                        <div class="stat-bubble-header">
+                                            <span class="bubble-label"><i data-lucide="package-x"></i> Out of Stock</span>
+                                            <span class="stat-click-hint">FILTER</span>
+                                        </div>
                                         <span class="bubble-value text-pink" id="stat-out">0</span>
                                     </div>
                                 </div>
@@ -548,6 +560,7 @@
                                         <div class="title-bar-left">
                                             <h2>Vault Catalog</h2>
                                             <span class="items-count-badge" id="results-count">Showing 0 items</span>
+                                            <span class="active-stock-pill" id="active-stock-pill" style="display: none;"></span>
                                         </div>
                                         <button class="btn-add-inventory-cyber" id="btn-inventory-add-item" style="display: none !important;">
                                             <i data-lucide="plus-circle"></i> Add Component

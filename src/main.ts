@@ -454,11 +454,11 @@ class DatabaseManager {
                 // Map Supabase inventory format to frontend InventoryItem format
                 inventory = dbItems.map((item: any) => {
                     let cat = (item.category || '').toLowerCase();
-                    if (cat.includes('controller') || cat.includes('mcu')) cat = 'microcontrollers';
+                    if (cat.includes('controller') || cat.includes('mcu') || cat.includes('board') || cat.includes('programmer')) cat = 'microcontrollers';
                     else if (cat.includes('sensor')) cat = 'sensors';
-                    else if (cat.includes('actuator') || cat.includes('motor')) cat = 'actuators';
-                    else if (cat.includes('power') || cat.includes('battery')) cat = 'power';
-                    else if (cat.includes('tool')) cat = 'tools';
+                    else if (cat.includes('actuator') || cat.includes('motor') || cat.includes('esc') || cat.includes('servo') || cat.includes('driver')) cat = 'actuators';
+                    else if (cat.includes('power') || cat.includes('battery') || cat.includes('charge') || cat.includes('supply')) cat = 'power';
+                    else if (cat.includes('tool') || cat.includes('comm') || cat.includes('display') || cat.includes('remote') || cat.includes('cable') || cat.includes('mechanical') || cat.includes('misc')) cat = 'tools';
 
                     const itemBorrows = liveBorrows
                         .filter((b: any) => (b.inventory_id === item.id || b.item_id === item.id) && b.status === 'BORROWED')
@@ -629,6 +629,9 @@ class DashboardManager {
     private mobileSidebarToggle: HTMLButtonElement | null;
     private mobileSidebarBackdrop: HTMLElement | null;
 
+    public activeStockFilter: 'all' | 'borrowed' | 'low' | 'out' = 'all';
+    private activeStockPill: HTMLElement | null = null;
+
     private clockTimerId: any = null;
 
     constructor() {
@@ -640,6 +643,7 @@ class DashboardManager {
         this.searchInput = document.getElementById('search-input') as HTMLInputElement;
         this.clearSearchBtn = document.getElementById('clear-search')!;
         this.resultsCount = document.getElementById('results-count')!;
+        this.activeStockPill = document.getElementById('active-stock-pill');
 
         this.statTotal = document.getElementById('stat-total')!;
         this.statBorrowed = document.getElementById('stat-borrowed')!;
@@ -1075,6 +1079,62 @@ class DashboardManager {
         themeBtnDark?.addEventListener('click', () => ThemeManager.applyTheme('cyberpunk'));
         themeBtnLight?.addEventListener('click', () => ThemeManager.applyTheme('light'));
         themeBtnPink?.addEventListener('click', () => ThemeManager.applyTheme('sakura'));
+
+        // 10. Interactive Stat Bubbles Filter Listeners (Total, Active Loans, Low Reserves, Out of Stock)
+        const statBubbles = document.querySelectorAll('.stat-bubble-new');
+        statBubbles.forEach(bubble => {
+            bubble.addEventListener('click', () => {
+                const target = (bubble as HTMLElement).dataset.stockFilter || 'all';
+                if (this.activeStockFilter === target && target !== 'all') {
+                    this.activeStockFilter = 'all';
+                } else {
+                    this.activeStockFilter = target as any;
+                }
+                this.updateStatBubbleUI();
+                this.renderInventory(true);
+            });
+        });
+    }
+
+    public updateStatBubbleUI() {
+        const statBubbles = document.querySelectorAll('.stat-bubble-new');
+        statBubbles.forEach(bubble => {
+            const f = (bubble as HTMLElement).dataset.stockFilter || 'all';
+            if (this.activeStockFilter === 'all') {
+                bubble.classList.remove('active-filter');
+            } else if (f === this.activeStockFilter) {
+                bubble.classList.add('active-filter');
+            } else {
+                bubble.classList.remove('active-filter');
+            }
+        });
+
+        if (this.activeStockPill) {
+            if (this.activeStockFilter === 'all') {
+                this.activeStockPill.style.display = 'none';
+                this.activeStockPill.innerHTML = '';
+            } else {
+                const labels: Record<string, string> = {
+                    borrowed: 'Active Loans',
+                    low: 'Low Reserves (≤ 2)',
+                    out: 'Out of Stock'
+                };
+                const filterText = labels[this.activeStockFilter] || this.activeStockFilter;
+                this.activeStockPill.style.display = 'inline-flex';
+                this.activeStockPill.innerHTML = `
+                    <span class="active-stock-pill-text"><i data-lucide="filter"></i> ${filterText}</span>
+                    <button class="btn-clear-stock-filter" title="Clear Stock Filter">✕</button>
+                `;
+                const clearBtn = this.activeStockPill.querySelector('.btn-clear-stock-filter');
+                clearBtn?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.activeStockFilter = 'all';
+                    this.updateStatBubbleUI();
+                    this.renderInventory(true);
+                });
+                lucide.createIcons();
+            }
+        }
     }
 
     public renderStats() {
@@ -1112,12 +1172,28 @@ class DashboardManager {
             const matchesCategory = this.activeCategory === 'all' || item.category === this.activeCategory;
             const matchesSearch = item.name.toLowerCase().includes(this.searchQuery) ||
                                   item.specs.toLowerCase().includes(this.searchQuery) ||
-                                  item.location.toLowerCase().includes(this.searchQuery);
-            return matchesCategory && matchesSearch;
+                                  item.location.toLowerCase().includes(this.searchQuery) ||
+                                  (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(this.searchQuery)));
+
+            const borrowedSum = (item.borrowedBy || []).reduce((sum, rec) => sum + rec.qty, 0);
+            const available = typeof item.availableQuantity === 'number'
+                ? item.availableQuantity
+                : Math.max(0, item.quantity - borrowedSum);
+
+            let matchesStock = true;
+            if (this.activeStockFilter === 'borrowed') {
+                matchesStock = borrowedSum > 0 || available < item.quantity;
+            } else if (this.activeStockFilter === 'low') {
+                matchesStock = available > 0 && available <= 2;
+            } else if (this.activeStockFilter === 'out') {
+                matchesStock = available === 0;
+            }
+
+            return matchesCategory && matchesSearch && matchesStock;
         });
 
         const role = ModalManager.getCurrentRole();
-        const currentFingerprint = `${role}_${this.activeCategory}_${this.searchQuery}_` + 
+        const currentFingerprint = `${role}_${this.activeCategory}_${this.activeStockFilter}_${this.searchQuery}_` + 
             filtered.map(i => `${i.id}_${i.availableQuantity}_${i.quantity}_${i.name}_${i.location}_${(i.borrowedBy || []).length}`).join('|');
 
         if (!force && this.lastRenderedFingerprint === currentFingerprint && this.inventoryGrid.children.length === filtered.length) {
@@ -1137,12 +1213,15 @@ class DashboardManager {
         }
 
         this.noResults.style.display = 'none';
-        this.resultsCount.innerText = `Showing ${filtered.length} component${filtered.length > 1 ? 's' : ''}`;
+        const filterSuffix = this.activeStockFilter === 'low' ? ' (Low Reserves)' :
+                             this.activeStockFilter === 'borrowed' ? ' (Active Loans)' :
+                             this.activeStockFilter === 'out' ? ' (Out of Stock)' : '';
+        this.resultsCount.innerText = `Showing ${filtered.length} component${filtered.length > 1 ? 's' : ''}${filterSuffix}`;
 
         filtered.forEach((item, index) => {
             const card = this.createCardElement(item);
             if (isInitial) {
-                card.style.transitionDelay = `${(index % 4) * 0.08}s`;
+                card.style.transitionDelay = `${(index % 4) * 0.06}s`;
             } else {
                 card.style.transitionDelay = '0s';
             }
@@ -1152,7 +1231,7 @@ class DashboardManager {
                 requestAnimationFrame(() => {
                     setTimeout(() => {
                         card.classList.add('active');
-                    }, 50);
+                    }, 40);
                 });
             } else {
                 card.classList.add('active');
@@ -1195,13 +1274,43 @@ class DashboardManager {
         }
 
         const catMap: Record<string, string> = {
-            microcontrollers: "Controller",
-            sensors: "Sensor",
-            actuators: "Actuator",
-            power: "Power Supply",
-            tools: "Lab Tool"
+            microcontrollers: "MCU",
+            sensors: "SENSOR",
+            actuators: "ACTUATOR",
+            power: "POWER",
+            tools: "HARDWARE"
         };
-        const categoryLabel = catMap[item.category] || item.category;
+        const categoryLabel = catMap[item.category] || item.category.toUpperCase();
+
+        // Shorter, punchier description for aesthetic display
+        const cleanSpecs = (item.specs || '').trim();
+        let shortDesc = cleanSpecs;
+        if (shortDesc.length > 56) {
+            const cut = shortDesc.substring(0, 54);
+            const lastSpace = cut.lastIndexOf(' ');
+            shortDesc = (lastSpace > 24 ? cut.substring(0, lastSpace) : cut).trim() + '...';
+        }
+
+        // Shorter location label (extracts sub-location e.g. "Rack S1, Box 1")
+        let shortLocation = item.location || 'Lab Vault';
+        if (shortLocation.includes(' - ')) {
+            shortLocation = shortLocation.split(' - ')[1].trim();
+        }
+
+        // Mini tech tags (up to 2 clean tags)
+        const rawTags = Array.isArray(item.tags) ? item.tags : [];
+        const miniTags = rawTags
+            .filter((t: string) => !['Sensors', 'Controllers', 'Actuators', 'Power', 'Tools', 'Mechanical'].includes(t))
+            .slice(0, 2);
+        const miniTagsHtml = miniTags.length > 0 ? `
+            <div class="card-tags-row">
+                ${miniTags.map((t: string) => `<span class="card-mini-tag">#${AdminManager.escapeHtml(t)}</span>`).join('')}
+            </div>
+        ` : '';
+
+        // Availability progress percentage
+        const fillPercent = item.quantity > 0 ? Math.min(100, Math.round((available / item.quantity) * 100)) : 0;
+
         const isAdmin = ModalManager.getCurrentRole() === 'ADMIN';
         const deleteBtnHtml = isAdmin ? `
             <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(item.name)}" onclick="event.stopPropagation(); event.preventDefault(); window.adminDeleteItem('${item.id}', '${AdminManager.escapeHtml(item.name)}')" title="Delete Component from Inventory">
@@ -1210,23 +1319,31 @@ class DashboardManager {
         ` : '';
 
         card.innerHTML = `
+            <div class="card-glow-bar bar-${statusClass}"></div>
             <div class="card-header">
-                <span class="card-category">${categoryLabel}</span>
+                <span class="card-category-badge cat-${item.category}">${categoryLabel}</span>
                 <div class="card-header-actions">
-                    <span class="status-indicator ${statusClass}">${statusText}</span>
+                    <span class="status-indicator ${statusClass}">
+                        <span class="status-indicator-dot"></span>
+                        ${statusText}
+                    </span>
                     ${deleteBtnHtml}
                 </div>
             </div>
-            <h3 class="card-title">${AdminManager.escapeHtml(item.name)}</h3>
-            <p class="card-desc">${AdminManager.escapeHtml(item.specs)}</p>
+            <h3 class="card-title" title="${AdminManager.escapeHtml(item.name)}">${AdminManager.escapeHtml(item.name)}</h3>
+            <p class="card-desc" title="${AdminManager.escapeHtml(item.specs)}">${AdminManager.escapeHtml(shortDesc)}</p>
+            ${miniTagsHtml}
             <div class="card-footer">
-                <div class="footer-info">
+                <div class="footer-info" title="${AdminManager.escapeHtml(item.location)}">
                     <span class="info-title">Location</span>
-                    <span class="info-content"><i data-lucide="map-pin"></i> ${AdminManager.escapeHtml(item.location)}</span>
+                    <span class="info-content"><i data-lucide="map-pin"></i> ${AdminManager.escapeHtml(shortLocation)}</span>
                 </div>
                 <div class="footer-info" style="align-items: flex-end;">
                     <span class="info-title">Availability</span>
-                    <span class="info-content"><strong>${available}</strong> / ${item.quantity}</span>
+                    <span class="info-content"><strong class="stock-curr ${statusClass}">${available}</strong> <span class="stock-divider">/</span> ${item.quantity}</span>
+                    <div class="availability-bar-track">
+                        <div class="availability-bar-fill fill-${statusClass}" style="width: ${fillPercent}%"></div>
+                    </div>
                 </div>
             </div>
         `;

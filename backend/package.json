@@ -8,6 +8,7 @@
     "build": "tsc && node scripts/ensure-render-dist.cjs",
     "postinstall": "tsc && node scripts/ensure-render-dist.cjs",
     "start": "node dist/server.js",
+    "seed:inventory": "ts-node --project tsconfig.json src/scripts/seed-inventory.ts",
     "test": "node --test \"test/*.test.cjs\""
   },
   "dependencies": {

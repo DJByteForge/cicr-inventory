@@ -50,7 +50,7 @@ export const getSmtpUser = (): string => {
 };
 
 export const getSmtpPass = (): string => {
-  return process.env.SMTP_PASS || '';
+  return (process.env.SMTP_PASS || '').replace(/\s+/g, '');
 };
 
 export const isSmtpConfigured = (): boolean => Boolean(getSmtpUser() && getSmtpPass());
@@ -1994,6 +1994,288 @@ export const sendAdminItemDeletedNotification = async (
     return { success: true, messageId: info.messageId };
   } catch (error: any) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send item deletion email:`, formatSmtpError(error));
+    return { success: false, error: formatSmtpError(error) };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 21. NEW USER REGISTRATION & TEMPORARY PASSWORD EMAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface UserWelcomeContext {
+  userName: string;
+  userEmail: string;
+  tempPassword?: string;
+  rollNumber?: string | null;
+  batch?: string | null;
+  portalUrl?: string;
+  isAutoApproved?: boolean;
+}
+
+export const sendUserWelcomeWithTempPasswordEmail = async (
+  recipientEmail: string,
+  context: UserWelcomeContext
+) => {
+  try {
+    const portalUrl = context.portalUrl || process.env.CLIENT_URL || 'https://cicr-inventory.vercel.app/';
+    const rollDisplay = context.rollNumber ? context.rollNumber : 'N/A';
+    const batchDisplay = context.batch ? context.batch : 'N/A';
+    const hasTempPassword = Boolean(context.tempPassword);
+
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:20px;margin-bottom:18px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">NAME:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.userName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">COLLEGE EMAIL:</td>
+            <td style="padding:6px 0;color:#00f0ff;font-weight:600;font-family:'SFMono-Regular',Consolas,monospace;">${context.userEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ENROLLMENT NO:</td>
+            <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${rollDisplay}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">LAB BATCH:</td>
+            <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${batchDisplay}</td>
+          </tr>
+        </table>
+      </div>
+
+      ${hasTempPassword ? `
+      <div style="background:rgba(0, 240, 255, 0.05);border:1px solid rgba(0, 240, 255, 0.3);border-radius:6px;padding:18px;margin-bottom:18px;text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;color:#00f0ff;text-transform:uppercase;margin-bottom:8px;font-family:'SFMono-Regular',Consolas,monospace;">
+          // TEMPORARY ACCESS CREDENTIALS
+        </div>
+        <div style="font-family:'SFMono-Regular',Consolas,monospace;font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;background:#05070e;display:inline-block;padding:10px 24px;border-radius:4px;border:1px solid rgba(0, 240, 255, 0.4);box-shadow:0 0 15px rgba(0, 240, 255, 0.2);">
+          ${context.tempPassword}
+        </div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:10px;">
+          Use this temporary password along with your college email to sign in.
+        </div>
+      </div>
+      ` : ''}
+
+      <div style="background:rgba(250,204,21,0.08);border-left:3px solid #facc15;padding:14px;border-radius:4px;font-size:12.5px;color:#e2e8f0;margin-top:14px;line-height:1.5;">
+        <strong style="color:#facc15;">Security Advisory:</strong> For your security, please log in to the CICR Robotics Vault and <strong>reset your password</strong> to a secure personal password of your choice immediately.
+      </div>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipientEmail,
+      subject: `[CICR Vault] Welcome to CICR Inventory - Your Account & Credentials`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('user-welcome-credentials', 'high'),
+      priority: 'high' as const,
+      text: [
+        `CICR ROBOTICS VAULT // ACCOUNT PROVISIONED`,
+        `================================================`,
+        `Welcome ${context.userName},`,
+        ``,
+        `Your account has been created on the CICR Robotics Inventory Vault.`,
+        `Email: ${context.userEmail}`,
+        `Enrollment No: ${rollDisplay}`,
+        `Lab Section Batch: ${batchDisplay}`,
+        ...(hasTempPassword ? [
+          ``,
+          `TEMPORARY PASSWORD: ${context.tempPassword}`,
+          `Please sign in using this temporary password.`
+        ] : []),
+        ``,
+        `IMPORTANT: Please log in at ${portalUrl} and reset your temporary password immediately.`,
+        ``,
+        `Regards,`,
+        `CICR Administration Team`
+      ].filter(Boolean).join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'SECURITY // ACCOUNT ACTIVATED',
+        badgeType: 'success',
+        title: `Welcome to CICR Vault`,
+        subtitle: `Your student portal account has been created successfully.`,
+        contentHtml,
+        actionButton: {
+          text: 'Sign In to CICR Vault',
+          url: portalUrl
+        }
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Welcome & Temporary Password email dispatched to ${recipientEmail}`);
+      return { success: true, mocked: true };
+    }
+
+    if (await enqueueEmail('user-welcome-credentials', mailOptions)) {
+      return { success: true, queued: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('User welcome & temp password email', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send user welcome email:`, formatSmtpError(error));
+    return { success: false, error: formatSmtpError(error) };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 22. PASSWORD RESET OTP EMAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const sendPasswordResetOtpEmail = async (
+  recipientEmail: string,
+  context: { userName: string; otp: string; expiresInMinutes?: number }
+) => {
+  try {
+    const minutes = context.expiresInMinutes || 10;
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:22px;margin-bottom:18px;text-align:center;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;color:#38bdf8;text-transform:uppercase;margin-bottom:12px;font-family:'SFMono-Regular',Consolas,monospace;">
+          // ONE-TIME VERIFICATION CODE
+        </div>
+        <div style="font-family:'SFMono-Regular',Consolas,monospace;font-size:32px;font-weight:800;letter-spacing:6px;color:#00f0ff;background:#05070e;display:inline-block;padding:12px 28px;border-radius:6px;border:1px solid rgba(0, 240, 255, 0.45);box-shadow:0 0 20px rgba(0, 240, 255, 0.25);">
+          ${context.otp}
+        </div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:14px;">
+          This code is valid for <strong>${minutes} minutes</strong>. Do not share it with anyone.
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding:12px;border-radius:2px;font-size:12px;color:#e2e8f0;margin-top:14px;line-height:1.5;">
+        <strong style="color:#ef4444;">Did not request this?</strong> If you did not initiate a password reset, you can safely disregard this email. Your current password remains unchanged.
+      </div>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipientEmail,
+      subject: `[CICR Security] Password Reset OTP Code: ${context.otp}`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('password-reset-otp', 'high'),
+      priority: 'high' as const,
+      text: [
+        `CICR SECURITY // PASSWORD RESET CODE`,
+        `================================================`,
+        `Hello ${context.userName},`,
+        ``,
+        `Your password reset verification code is: ${context.otp}`,
+        `This code is valid for ${minutes} minutes.`,
+        ``,
+        `If you did not request this, please ignore this email.`,
+        ``,
+        `Regards,`,
+        `CICR Security Team`
+      ].join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'SECURITY // PASSWORD RESET',
+        badgeType: 'warning',
+        title: 'Reset Your Password',
+        subtitle: `Verification code for ${context.userName}`,
+        contentHtml
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Password reset OTP [${context.otp}] dispatched to ${recipientEmail}`);
+      return { success: true, mocked: true };
+    }
+
+    if (await enqueueEmail('password-reset-otp', mailOptions)) {
+      return { success: true, queued: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('Password reset OTP email', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP:`, formatSmtpError(error));
+    return { success: false, error: formatSmtpError(error) };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 23. PASSWORD CHANGED NOTIFICATION EMAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const sendPasswordChangedSuccessEmail = async (
+  recipientEmail: string,
+  context: { userName: string; changedAt?: Date }
+) => {
+  try {
+    const timeStr = (context.changedAt || new Date()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:18px;margin-bottom:18px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">ACCOUNT:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.userName} (${recipientEmail})</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">STATUS:</td>
+            <td style="padding:6px 0;color:#39ff14;font-weight:600;font-family:'SFMono-Regular',Consolas,monospace;">PASSWORD UPDATED SUCCESSFULLY</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">TIMESTAMP:</td>
+            <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${timeStr} IST</td>
+          </tr>
+        </table>
+      </div>
+      <div style="background:rgba(59,130,246,0.08);border-left:3px solid #3b82f6;padding:12px;border-radius:2px;font-size:12px;color:#cbd5e1;margin-top:14px;line-height:1.5;">
+        If you did not make this change, please contact the CICR Lab Administrator immediately at <strong>cicrinventory@gmail.com</strong>.
+      </div>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipientEmail,
+      subject: `[CICR Security] Your Password Has Been Updated`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('password-changed-notification'),
+      priority: 'normal' as const,
+      text: [
+        `CICR SECURITY // PASSWORD CHANGED`,
+        `================================================`,
+        `Hello ${context.userName},`,
+        ``,
+        `Your password for the CICR Inventory Vault was successfully changed at ${timeStr} IST.`,
+        ``,
+        `If you did not authorize this change, please notify administrators immediately.`,
+        ``,
+        `Regards,`,
+        `CICR Security Team`
+      ].join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'SECURITY // CREDENTIALS UPDATED',
+        badgeType: 'success',
+        title: 'Password Updated',
+        subtitle: `Your password was changed successfully.`,
+        contentHtml,
+        actionButton: {
+          text: 'Sign In to CICR Vault',
+          url: process.env.CLIENT_URL || 'https://cicr-inventory.vercel.app/'
+        }
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Password changed alert dispatched to ${recipientEmail}`);
+      return { success: true, mocked: true };
+    }
+
+    if (await enqueueEmail('password-changed-notification', mailOptions)) {
+      return { success: true, queued: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('Password changed notification email', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password changed email:`, formatSmtpError(error));
     return { success: false, error: formatSmtpError(error) };
   }
 };

@@ -25,8 +25,12 @@ import {
   sendUserApprovalSuccessEmail,
   sendUserRejectionNotificationEmail,
   sendAdminUserStatusAlert,
-  sendLoginSecurityAlertEmail
+  sendLoginSecurityAlertEmail,
+  sendUserWelcomeWithTempPasswordEmail,
+  sendPasswordResetOtpEmail,
+  sendPasswordChangedSuccessEmail
 } from '../../services/emailService';
+import { generateAuthOtp, storeAuthOtp, verifyAuthOtp, consumeAuthOtp } from './authOtpService';
 import { logAuditEvent } from '../../services/auditService';
 
 export const register = async (req: Request, res: Response) => {
@@ -154,6 +158,16 @@ export const register = async (req: Request, res: Response) => {
         registeredAt: newUser.created_at || new Date().toISOString()
       }).catch((e) => console.error('[EMAIL ERROR] Failed to send admin registration alert:', e));
     }
+
+    // Dispatch Welcome & Temporary Credentials Email directly to the registered user
+    sendUserWelcomeWithTempPasswordEmail(normEmail, {
+      userName: name.trim(),
+      userEmail: normEmail,
+      tempPassword: password,
+      rollNumber: userRoll,
+      batch: userBatch,
+      isAutoApproved: isMasterAdmin
+    }).catch((e) => console.error('[EMAIL ERROR] Failed to send welcome credentials email:', e));
 
     const message = isMasterAdmin
       ? 'Admin registered and approved successfully!'
@@ -585,6 +599,280 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     }).catch(() => {});
 
     return res.status(200).json({ status: 'success', message: `User ${user.name} permanently deleted from database.` });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FORGOT PASSWORD (REQUEST RESET OTP)
+// ──────────────────────────────────────────────────────────────────────────────
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { identifier, email } = req.body;
+    const loginId = (identifier || email || '').trim();
+
+    if (!loginId) {
+      return res.status(400).json({ status: 'error', message: 'College email or enrollment number is required.' });
+    }
+
+    // Lookup user by email or roll_number
+    let user: any = null;
+    if (loginId.includes('@')) {
+      const { data } = await dbRead.from('users').select('id, name, email, role').eq('email', loginId.toLowerCase()).maybeSingle();
+      if (data) user = data;
+    }
+
+    if (!user) {
+      const { data } = await dbRead.from('users').select('id, name, email, role').or(`email.ilike.${loginId},roll_number.eq.${loginId}`).limit(1).maybeSingle();
+      if (data) user = data;
+    }
+
+    if (!user) {
+      const match = findUserApprovalByIdentifier(loginId);
+      if (match) {
+        const { data } = await dbRead.from('users').select('id, name, email, role').eq('email', match.email).maybeSingle();
+        if (data) user = data;
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'No registered user found with that email or enrollment number.' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = generateAuthOtp();
+    storeAuthOtp(otp, { email: user.email.toLowerCase(), role: user.role });
+
+    // Send reset OTP email
+    await sendPasswordResetOtpEmail(user.email, {
+      userName: user.name,
+      otp,
+      expiresInMinutes: 10
+    });
+
+    logAuditEvent({
+      action: 'Password Reset Requested',
+      userId: user.id,
+      itemId: null,
+      description: `Password reset verification OTP requested for ${user.name} (${user.email})`
+    }).catch(() => {});
+
+    return res.status(200).json({
+      status: 'success',
+      message: `A 6-digit verification code has been sent to ${user.email}. It is valid for 10 minutes.`,
+      data: { email: user.email }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RESET PASSWORD (WITH OTP)
+// ──────────────────────────────────────────────────────────────────────────────
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, otp, new_password } = req.body;
+
+    if (!email || !otp || !new_password) {
+      return res.status(400).json({ status: 'error', message: 'Email, verification code (OTP), and new password are required.' });
+    }
+
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ status: 'error', message: 'New password must be at least 6 characters.' });
+    }
+
+    const normEmail = email.trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+
+    // Verify OTP
+    const payload = verifyAuthOtp(cleanOtp);
+    if (!payload || payload.email.toLowerCase() !== normEmail) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired verification code. Please request a new code.' });
+    }
+
+    // Lookup user in DB
+    const { data: user, error: userErr } = await dbRead.from('users').select('id, name, email').eq('email', normEmail).maybeSingle();
+    if (userErr || !user) {
+      return res.status(404).json({ status: 'error', message: 'User account not found.' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(new_password, salt);
+
+    // Update password in DB
+    const { error: updateErr } = await dbWrite.from('users').update({ password_hash }).eq('id', user.id);
+    if (updateErr) {
+      console.error('[RESET PASSWORD ERROR] Failed to update password in DB:', updateErr);
+      return res.status(500).json({ status: 'error', message: 'Failed to update password in database.' });
+    }
+
+    // Consume OTP
+    consumeAuthOtp(cleanOtp);
+
+    // Send confirmation email
+    sendPasswordChangedSuccessEmail(user.email, {
+      userName: user.name,
+      changedAt: new Date()
+    }).catch((e) => console.error('[EMAIL ERROR] Failed to send password changed email:', e));
+
+    logAuditEvent({
+      action: 'Password Reset Success',
+      userId: user.id,
+      itemId: null,
+      description: `Password reset successfully via OTP for ${user.name} (${user.email})`
+    }).catch(() => {});
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Your password has been reset successfully! You can now log in with your new password.'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CHANGE PASSWORD (AUTHENTICATED IN-PORTAL)
+// ──────────────────────────────────────────────────────────────────────────────
+export const changePassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { current_password, new_password } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Unauthorized. Please sign in.' });
+    }
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ status: 'error', message: 'Current password and new password are required.' });
+    }
+
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ status: 'error', message: 'New password must be at least 6 characters.' });
+    }
+
+    // Retrieve user from DB including current password hash
+    const { data: user, error: userErr } = await dbRead.from('users').select('id, name, email, password_hash').eq('id', userId).single();
+    if (userErr || !user) {
+      return res.status(404).json({ status: 'error', message: 'User not found.' });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(current_password, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ status: 'error', message: 'Current password is incorrect.' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(new_password, salt);
+
+    // Update in DB
+    const { error: updateErr } = await dbWrite.from('users').update({ password_hash }).eq('id', user.id);
+    if (updateErr) {
+      console.error('[CHANGE PASSWORD ERROR] DB update failed:', updateErr);
+      return res.status(500).json({ status: 'error', message: 'Failed to update password.' });
+    }
+
+    // Send confirmation email
+    sendPasswordChangedSuccessEmail(user.email, {
+      userName: user.name,
+      changedAt: new Date()
+    }).catch((e) => console.error('[EMAIL ERROR] Failed to send password changed email:', e));
+
+    logAuditEvent({
+      action: 'Password Changed',
+      userId: user.id,
+      itemId: null,
+      description: `User ${user.name} (${user.email}) changed their password in-portal`
+    }).catch(() => {});
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Password updated successfully!'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ADMIN CREATE USER (DIRECT PROVISIONING WITH AUTO-APPROVAL & WELCOME EMAIL)
+// ──────────────────────────────────────────────────────────────────────────────
+export const adminCreateUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, email, username, password, roll_number, batch, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ status: 'error', message: 'Name, college email, and temporary password are required.' });
+    }
+
+    const normEmail = email.trim().toLowerCase();
+    const normUsername = (username || name).trim();
+    const userBatch = batch ? String(batch).trim() : null;
+    const userRole = role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+
+    let userRoll = roll_number ? String(roll_number).trim() : null;
+    if (!userRoll) {
+      const match = normEmail.match(/^(\d+)@mail\.jiit\.ac\.in$/i);
+      if (match) userRoll = match[1];
+    }
+
+    // Check duplicate
+    const { data: existing } = await dbRead.from('users').select('id, email, roll_number').or(`email.ilike.${normEmail}${userRoll ? `,roll_number.eq.${userRoll}` : ''}`).limit(1).maybeSingle();
+    if (existing) {
+      return res.status(400).json({ status: 'error', message: `An account with email ${normEmail} or enrollment number ${userRoll} already exists.` });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    unpurgeEmail(normEmail);
+
+    const { data: newUser, error: insertError } = await dbWrite
+      .from('users')
+      .insert([{ name: name.trim(), email: normEmail, password_hash, roll_number: userRoll, role: userRole }])
+      .select('id, name, email, roll_number, role, created_at')
+      .single();
+
+    if (insertError || !newUser) {
+      console.error('[ADMIN CREATE USER ERROR]:', insertError);
+      return res.status(500).json({ status: 'error', message: `Failed to create user in database: ${insertError?.message || 'DB error'}` });
+    }
+
+    // Admin-created users are automatically APPROVED!
+    setUserApproval(normEmail, 'APPROVED', req.user?.email || 'ADMIN', {
+      username: normUsername,
+      batch: userBatch,
+      name: name.trim(),
+      roll_number: userRoll
+    });
+
+    // Send Welcome Email with Temporary Password
+    sendUserWelcomeWithTempPasswordEmail(normEmail, {
+      userName: name.trim(),
+      userEmail: normEmail,
+      tempPassword: password,
+      rollNumber: userRoll,
+      batch: userBatch,
+      isAutoApproved: true
+    }).catch((e) => console.error('[EMAIL ERROR] Failed to send welcome email:', e));
+
+    logAuditEvent({
+      action: 'Admin Created User',
+      userId: req.user?.id,
+      itemId: null,
+      description: `Admin ${req.user?.name || 'Admin'} provisioned member account for ${name.trim()} (${normEmail}) [Batch: ${userBatch || 'N/A'}, Role: ${userRole}]`
+    }).catch(() => {});
+
+    return res.status(201).json({
+      status: 'success',
+      message: `User ${name} provisioned successfully! Credentials and instructions emailed to ${normEmail}.`,
+      data: { ...newUser, username: normUsername, batch: userBatch, status: 'APPROVED' }
+    });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
