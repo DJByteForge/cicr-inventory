@@ -223,167 +223,20 @@ export const borrowItem = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// POST /api/borrow/request-otp (Request Admin OTP approval)
+// POST /api/borrow/request-otp (DECOMMISSIONED - NO OTP SYSTEM)
 export const requestOtp = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?.id || '';
-    const userEmail = req.user?.email || '';
-    const userName = req.user?.name || 'Borrower';
-    const { item_id, quantity = 1, purpose = 'Admin OTP approved borrow', duration_days, selected_admin_id } = req.body;
-
-    if (!item_id || !selected_admin_id) {
-      return res.status(400).json({ status: 'error', message: 'item_id, duration_days, and selected_admin_id are required.' });
-    }
-
-    const days = parseRentalDays(duration_days);
-    if (days === null) {
-      return res.status(400).json({ status: 'error', message: daysErrorMessage });
-    }
-
-    const qty = Number(quantity);
-    if (qty <= 0) {
-      return res.status(400).json({ status: 'error', message: 'Quantity must be greater than 0.' });
-    }
-
-    const admin = getAdminById(String(selected_admin_id));
-    if (!admin) {
-      return res.status(404).json({ status: 'error', message: 'Selected admin not found in the admin directory.' });
-    }
-
-    const { data: item, error: itemErr } = await dbRead
-      .from('inventory')
-      .select('*')
-      .eq('id', item_id)
-      .single();
-
-    if (itemErr || !item) {
-      return res.status(404).json({ status: 'error', message: 'Item not found.' });
-    }
-
-    if (item.available_quantity < qty) {
-      return res.status(400).json({
-        status: 'error',
-        message: `Requested quantity (${qty}) exceeds available stock (${item.available_quantity}).`
-      });
-    }
-
-    const otp = generateOtp();
-    storeOtp(otp, {
-      userId,
-      userName,
-      userEmail,
-      itemId: item_id,
-      quantity: qty,
-      purpose,
-      durationDays: days,
-      adminId: admin.id
-    });
-
-    const emailResult = await sendOtpEmail(admin.email, admin.name, userName, otp, item.name, days);
-
-    if (!emailResult.success) {
-      return res.status(502).json({ status: 'error', message: 'OTP generated but failed to send to admin email.', data: emailResult });
-    }
-
-    await logAudit('OTP Requested', userId, item_id, `OTP approval requested from ${admin.name} (${admin.email}) for "${item.name}" (${days} days)`);
-
-    return res.status(200).json({
-      status: 'success',
-      message: `OTP sent to admin ${admin.name} (${admin.email}). It expires in 10 minutes.`,
-      data: {
-        expires_in_seconds: 600,
-        item_id,
-        duration_days: days,
-        selected_admin: { id: admin.id, name: admin.name, email: admin.email }
-      }
-    });
-  } catch (err: any) {
-    return res.status(500).json({ status: 'error', message: err.message });
-  }
+  return res.status(400).json({
+    status: 'error',
+    message: 'OTP system has been removed. Issue requests are submitted directly and authorized by Admins in the portal.'
+  });
 };
 
-// POST /api/borrow/verify-otp (Verify admin OTP and confirm borrow)
+// POST /api/borrow/verify-otp (DECOMMISSIONED - NO OTP SYSTEM)
 export const verifyOtp = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?.id || '';
-    const userEmail = req.user?.email || '';
-    const userName = req.user?.name || 'Borrower';
-    const { otp } = req.body;
-
-    if (!otp) {
-      return res.status(400).json({ status: 'error', message: 'otp is required.' });
-    }
-
-    const payload = verifyOtpCode(String(otp));
-    if (!payload) {
-      return res.status(400).json({ status: 'error', message: 'Invalid or expired OTP.' });
-    }
-
-    if (payload.userId !== userId) {
-      return res.status(400).json({ status: 'error', message: 'OTP was issued to a different user.' });
-    }
-
-    consumeOtp(String(otp));
-
-    const result = await finalizeBorrow({
-      userId,
-      userName,
-      itemId: payload.itemId,
-      quantity: payload.quantity,
-      purpose: payload.purpose,
-      durationDays: payload.durationDays
-    });
-
-    if (result.error) {
-      return res.status(result.error.status).json({ status: 'error', message: result.error.message });
-    }
-
-    const { borrowRecord, item, newAvailableQty, dueDate } = result;
-
-    if (userEmail) {
-      const { data: activeHolders } = await dbRead
-        .from('borrow_records')
-        .select('borrower_name, roll_number, quantity, borrowed_at')
-        .eq('inventory_id', payload.itemId)
-        .eq('status', 'BORROWED')
-        .neq('id', borrowRecord.id);
-
-      dispatchBackground('borrow-confirmation', sendBorrowConfirmation(userEmail, userName, {
-        itemName: item.name,
-        category: item.category,
-        quantity: payload.quantity,
-        remainingStock: newAvailableQty,
-        holders: activeHolders || [],
-        durationDays: payload.durationDays,
-        dueDate
-      }));
-    }
-
-    // Instant notification to all superadmins
-    dispatchBackground('admin-borrow-alert', sendAdminBorrowNotification(SUPER_ADMIN_EMAILS, {
-      borrowerName: userName,
-      borrowerEmail: userEmail || 'N/A',
-      rollNumber: req.user?.roll_number,
-      itemName: item.name,
-      category: item.category,
-      quantity: payload.quantity,
-      remainingStock: newAvailableQty,
-      purpose: payload.purpose,
-      durationDays: payload.durationDays,
-      dueDate
-    }));
-
-    return res.status(201).json({
-      status: 'success',
-      message: 'OTP verified. Borrow confirmed successfully!',
-      data: {
-        borrow: borrowRecord,
-        approved_by_admin_id: payload.adminId
-      }
-    });
-  } catch (err: any) {
-    return res.status(500).json({ status: 'error', message: err.message });
-  }
+  return res.status(400).json({
+    status: 'error',
+    message: 'OTP system has been removed. Issue requests are submitted directly and authorized by Admins in the portal.'
+  });
 };
 
 // POST /api/borrow/return (Return Item)

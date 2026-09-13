@@ -618,65 +618,14 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 // ──────────────────────────────────────────────────────────────────────────────
 // FORGOT PASSWORD (REQUEST RESET OTP)
 // ──────────────────────────────────────────────────────────────────────────────
+// FORGOT PASSWORD (NO OTP REQUIRED - DIRECT RESET ACTIVE)
+// ──────────────────────────────────────────────────────────────────────────────
 export const forgotPassword = async (req: Request, res: Response) => {
-  try {
-    const { identifier, email } = req.body;
-    const loginId = (identifier || email || '').trim();
-
-    if (!loginId) {
-      return res.status(400).json({ status: 'error', message: 'College email or enrollment number is required.' });
-    }
-
-    // Lookup user by email or roll_number
-    let user: any = null;
-    if (loginId.includes('@')) {
-      const { data } = await dbRead.from('users').select('id, name, email, role').eq('email', loginId.toLowerCase()).maybeSingle();
-      if (data) user = data;
-    }
-
-    if (!user) {
-      const { data } = await dbRead.from('users').select('id, name, email, role').or(`email.ilike.${loginId},roll_number.eq.${loginId}`).limit(1).maybeSingle();
-      if (data) user = data;
-    }
-
-    if (!user) {
-      const match = findUserApprovalByIdentifier(loginId);
-      if (match) {
-        const { data } = await dbRead.from('users').select('id, name, email, role').eq('email', match.email).maybeSingle();
-        if (data) user = data;
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({ status: 'error', message: 'No registered user found with that email or enrollment number.' });
-    }
-
-    // Generate 6-digit OTP
-    const otp = generateAuthOtp();
-    storeAuthOtp(otp, { email: user.email.toLowerCase(), role: user.role });
-
-    // Send reset OTP email
-    await sendPasswordResetOtpEmail(user.email, {
-      userName: user.name,
-      otp,
-      expiresInMinutes: 10
-    });
-
-    logAuditEvent({
-      action: 'Password Reset Requested',
-      userId: user.id,
-      itemId: null,
-      description: `Password reset verification OTP requested for ${user.name} (${user.email})`
-    }).catch(() => {});
-
-    return res.status(200).json({
-      status: 'success',
-      message: `A 6-digit verification code has been sent to ${user.email}. It is valid for 10 minutes.`,
-      data: { email: user.email }
-    });
-  } catch (err: any) {
-    return res.status(500).json({ status: 'error', message: err.message });
-  }
+  return res.status(200).json({
+    status: 'success',
+    message: 'OTP verification has been completely decommissioned. You can reset your password directly on the website without any OTP.',
+    direct_reset: true
+  });
 };
 
 // ──────────────────────────────────────────────────────────────────────────────

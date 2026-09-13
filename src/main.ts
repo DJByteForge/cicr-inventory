@@ -2164,7 +2164,7 @@ class ModalManager {
 
             ToastManager.show(
                 'Request Transmitted',
-                `Issue request for ${qty}x ${selectedItem.name} submitted for Admin authorization. Telemetry email dispatched to administrators.`,
+                `Issue request for ${qty}x ${selectedItem.name} submitted for Admin authorization.`,
                 'success'
             );
             DatabaseManager.addLog('borrow', `<span>${borrowerName}</span> requested ${qty}x <span>${selectedItem.name}</span> for '${purpose}'.`);
@@ -2177,7 +2177,7 @@ class ModalManager {
             this.close('borrow-form-modal');
             ToastManager.show(
                 'Request Transmitted',
-                `Issue request for ${qty}x ${selectedItem.name} submitted for Admin authorization. Telemetry email dispatched to administrators.`,
+                `Issue request for ${qty}x ${selectedItem.name} submitted for Admin authorization.`,
                 'success'
             );
             DatabaseManager.addLog('borrow', `<span>${borrowerName}</span> requested ${qty}x <span>${selectedItem.name}</span> for '${purpose}'.`);
@@ -3784,10 +3784,10 @@ class AdminManager {
             } else if (['Sign In', 'Sign Up', 'Role Changed'].includes(action)) {
                 badgeClass = 'action-purple';
                 iconName = action === 'Sign In' ? 'log-in' : 'user-plus';
-            } else if (['Borrowed', 'Item Borrowed', 'OTP Requested'].includes(action)) {
+            } else if (['Borrowed', 'Item Borrowed', 'Hardware Requested'].includes(action)) {
                 badgeClass = 'action-yellow';
                 iconName = 'package';
-            } else if (['Hardware Requested', 'Item Edited'].includes(action)) {
+            } else if (['Hardware Approved', 'Item Edited'].includes(action)) {
                 badgeClass = 'action-cyan';
                 iconName = 'cpu';
             }
