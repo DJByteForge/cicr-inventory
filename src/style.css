@@ -1559,7 +1559,7 @@ body.theme-light .auth-card input::placeholder,
 .inventory-card {
     display: flex;
     flex-direction: column;
-    padding: 18px 20px;
+    padding: 16px 16px;
     cursor: pointer;
     position: relative;
     overflow: hidden;
@@ -1710,15 +1710,27 @@ body.theme-light .auth-card input::placeholder,
 
 .card-title {
     font-family: 'Orbitron', sans-serif;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     color: #ffffff;
     margin-bottom: 6px;
-    line-height: 1.35;
-    letter-spacing: 0.3px;
+    line-height: 1.25;
+    letter-spacing: 0.15px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: font-size 0.2s ease;
+}
+
+.card-title.title-compact-sm {
+    font-size: 11.2px;
+    letter-spacing: -0.05px;
+}
+
+.card-title.title-compact-xs {
+    font-size: 10px;
+    letter-spacing: -0.25px;
+    font-weight: 600;
 }
 
 .card-desc {

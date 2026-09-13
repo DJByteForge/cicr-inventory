@@ -1282,6 +1282,17 @@ class DashboardManager {
         };
         const categoryLabel = catMap[item.category] || item.category.toUpperCase();
 
+        // Ensure "Arduino Board (model unclear)" is displayed as "Arduino Uno R3"
+        let itemName = item.name;
+        if (itemName.toLowerCase().includes('model unclear') || itemName.toLowerCase() === 'arduino board') {
+            itemName = 'Arduino Uno R3';
+            item.name = 'Arduino Uno R3';
+        }
+
+        // Dynamic 1-line sizing class so longer component names never get hidden or truncated
+        const nameLen = itemName.length;
+        const titleSizeClass = nameLen > 28 ? 'title-compact-xs' : nameLen > 18 ? 'title-compact-sm' : '';
+
         // Shorter, punchier description for aesthetic display
         const cleanSpecs = (item.specs || '').trim();
         let shortDesc = cleanSpecs;
@@ -1313,7 +1324,7 @@ class DashboardManager {
 
         const isAdmin = ModalManager.getCurrentRole() === 'ADMIN';
         const deleteBtnHtml = isAdmin ? `
-            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(item.name)}" onclick="event.stopPropagation(); event.preventDefault(); window.adminDeleteItem('${item.id}', '${AdminManager.escapeHtml(item.name)}')" title="Delete Component from Inventory">
+            <button class="btn-card-delete-item" data-id="${item.id}" data-name="${AdminManager.escapeHtml(itemName)}" onclick="event.stopPropagation(); event.preventDefault(); window.adminDeleteItem('${item.id}', '${AdminManager.escapeHtml(itemName)}')" title="Delete Component from Inventory">
                 <i data-lucide="trash-2"></i>
             </button>
         ` : '';
@@ -1330,7 +1341,7 @@ class DashboardManager {
                     ${deleteBtnHtml}
                 </div>
             </div>
-            <h3 class="card-title" title="${AdminManager.escapeHtml(item.name)}">${AdminManager.escapeHtml(item.name)}</h3>
+            <h3 class="card-title ${titleSizeClass}" title="${AdminManager.escapeHtml(itemName)}">${AdminManager.escapeHtml(itemName)}</h3>
             <p class="card-desc" title="${AdminManager.escapeHtml(item.specs)}">${AdminManager.escapeHtml(shortDesc)}</p>
             ${miniTagsHtml}
             <div class="card-footer">

@@ -188,13 +188,13 @@ export const INVENTORY_DATA: SeedItem[] = [
     image: 'microchip.jpg'
   },
   {
-    name: 'Arduino Board (model unclear)',
+    name: 'Arduino Uno R3',
     category: 'Controllers',
     quantity: 7,
     available_quantity: 7,
     location: 'Controllers Bay - Rack C1, Tray 2',
-    description: 'Arduino-compatible AVR development board for prototyping, robotics logic control, and general hardware experimentation.',
-    tags: ['Controllers', 'Arduino', 'AVR', 'MCU', 'Dev Board', 'Prototyping'],
+    description: 'Arduino Uno R3 ATmega328P Microcontroller Board with 14 digital I/O pins, 6 analog inputs, and 16MHz crystal oscillator.',
+    tags: ['Controllers', 'Arduino', 'Uno', 'Uno R3', 'ATmega328P', 'MCU', 'Dev Board'],
     image: 'microchip.jpg'
   },
   {
