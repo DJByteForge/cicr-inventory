@@ -69,8 +69,9 @@ Track, reserve, and deploy microcontrollers, sensors, and actuators from JIIT's 
 | **v2.5.1** | ✅ Released | **Production Deployment & Security Hardening.** Dual-endpoint hardware request fallback, theme contrast optimizations, verified SMTP fallback for Render production (`render.yaml`), Vercel SPA build config (`vercel.json`), and purge of compiled build artifacts from source control. |
 | **v2.6.0** | ✅ Released | **10-Min OTP Verification Popup, 10-Min Cooldown Gap, 5-Field Registration & Real-Time Audit Stream.** Security verification popup modal for sign-in requiring 6-digit email OTP (strictly valid for 10 minutes with enforced 10-minute gap before new OTP generation), 5-field registration (`Name`, `Email`, `Username`, `Enrollment Number`, `Batch`), flexible sign-in via Email/Username/Name, real-time System Audit & Activity Logs stream (`#admin-audit-section`), in-app item deletion, 6-second auto-sync engine, zero mock data. |
 | **v2.7.0** | ✅ Released | **Master Whitelist Enforcement, Theme Background Hardening & Complete Database Purge.** All test/pending data cleared across Supabase PostgreSQL tables (`borrow_records`, hardware issue requests, `audit_logs`, `inventory`, and non-admin user accounts); database strictly holds dual master superadmins (`vardaansaxena096@gmail.com` and `cicrinventory@gmail.com`); theme backgrounds hardened with `!important` rule overrides and dynamic client-side cloud API failover. |
+| **v2.8.0** | ✅ Released | **Zero-Latency 1-Click Approvals, Request De-duplication Engine, Tamper-Proof Autofilled Borrower Lock, Complete 54-Item Catalog & Cold-Start Session Recovery.** Instant optimistic UI card removal for hardware and member authorizations; atomic submit lock with composite content-based request de-duplication; automated read-only prefill for student borrower credentials; comprehensive 54-component robotics inventory with 500-unit limit; updated developer roster with crisp SVG links; and backend memory caching (15s TTL) with cold-start resilient auth recovery. |
 
-> The current active release is **v2.7.0 — Master Whitelist Enforcement, Theme Background Hardening & Complete Database Purge**. Both the Vercel frontend and Render backend run in production with live database sync, multi-tier hardware queues, real-time activity auditing, and automated transactional telemetry.
+> The current active release is **v2.8.0 — Zero-Latency 1-Click Approvals, Request Queue De-duplication, Tamper-Proof Autofilled Borrower Lock & Complete 54-Item Catalog**. Both the Vercel frontend and Render backend run in production with live database sync, multi-tier hardware queues, real-time activity auditing, and automated transactional telemetry.
 
 ### 🏷️ Version Registry (Git Tags)
 
@@ -87,6 +88,7 @@ Track, reserve, and deploy microcontrollers, sensors, and actuators from JIIT's 
 | **v2.5.1** | `v2.5.1` | ✅ Released | Production Deployments & Security Polish |
 | **v2.6.0** | `v2.6.0`, `v2.6` | ✅ Released | 10-Min OTP Popup, 10-Min Cooldown Gap, 5-Field Registration & Audit Stream |
 | **v2.7.0** | `v2.7.0` | ✅ Released | Database Purge, Master Admin Whitelist & Theme Engine Hardening |
+| **v2.8.0** | `v2.8.0`, `v2.8` | ✅ Released | 1-Click Approvals, Request De-duplication, Locked Borrower Details & 54-Item Catalog |
 
 ---
 
@@ -772,6 +774,12 @@ Configure environment variables in the Render Dashboard matching `backend/.env.e
 - [x] Real-time System Audit & Activity Logs Center with category filters and instant search.
 - [x] Automated 6-second background auto-synchronization between client and PostgreSQL.
 - [x] Complete database mock data purge retaining strictly authentic vault inventory and authorized administrators.
+- [x] Zero-latency optimistic 1-click issue request approvals and member authorizations with badge telemetry.
+- [x] Hardware issue request de-duplication engine with composite content keying and atomic submit locking.
+- [x] Tamper-proof read-only auto-fill for borrower identity details on hardware checkouts.
+- [x] Full 54-component robotics hardware catalog with interactive stat filter buttons and 500-unit cap.
+- [x] Resilient session recovery across Render cold starts and network failovers.
+- [x] Modernized Meet The Developers showcase with verified GitHub and LinkedIn SVG links.
 
 ### Future Roadmap
 - [ ] **QR Code Component Tagging**: Dynamic QR generation for instant hardware scanning on mobile devices.

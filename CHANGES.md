@@ -64,6 +64,15 @@ A large frontend pass (~2,500 line diff across `index.html`, `src/main.ts`, `src
 
 **`5aa4745`** merges this reminder work into `main` (PR #5, branch `deployment-failure`).
 
+## 7. Version 2.8.0 — Zero-Latency 1-Click Actions, Hardware Request De-duplication, Locked Borrower Details & 54-Item Catalog
+
+- **Instant 1-Click Approvals & Rejections**: Hardware and user authorizations now execute with zero perceived latency (0ms optimistic UI removal and badge decrement). Network checkout and rejection notifications sync seamlessly in the background.
+- **Request Queue De-duplication**: Resolved duplicate cards on admin queue with content keying (`itemId__borrowerName__purpose__quantity`) across server and local caches, backed by an atomic button submission lock.
+- **Autofilled & Locked Borrower Information**: Student issue request modal automatically fetches the authenticated student's name and roll number, locked as read-only.
+- **Full 54-Item Hardware Catalog**: Expanded robotics inventory with full categorization, interactive stat filters, dynamic single-line title scaling, and 500-unit component creation ceiling.
+- **Developer Showcase Overhaul**: Added verified LinkedIn & GitHub SVG icons, refined coordinator and mentor guidance credits.
+- **Session & Infrastructure Hardening**: Resilient user session preservation across Render cold starts; removed prestart tsc to eliminate cloud OOM; dynamic backend failover.
+
 ---
 
 ## Net effect
