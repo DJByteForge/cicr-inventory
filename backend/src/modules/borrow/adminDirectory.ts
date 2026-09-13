@@ -6,7 +6,11 @@ export interface AdminDirectoryEntry {
 
 export const ADMIN_DIRECTORY: AdminDirectoryEntry[] = [
   { id: 'cicr-admin', name: 'CICR Inventory Admin', email: 'cicrinventory@gmail.com' },
-  { id: 'master-vardaan', name: 'Vardaan', email: 'vardaansaxena096@gmail.com' }
+  { id: 'master-vardaan', name: 'Vardaan Saxena', email: 'vardaansaxena096@gmail.com' },
+  { id: 'admin-vardaan-jiit', name: 'Vardaan Saxena', email: '992501030399@mail.jiit.ac.in' },
+  { id: 'admin-gunjan', name: 'Gunjan Pal', email: '992401210050@mail.jiit.ac.in' },
+  { id: 'admin-dhruvi', name: 'Dhruvi Gupta', email: '992401030123@mail.jiit.ac.in' },
+  { id: 'admin-aryan', name: 'Aryan Varshney', email: '992401030154@mail.jiit.ac.in' }
 ];
 
 export const getAdminById = (adminId: string): AdminDirectoryEntry | undefined =>

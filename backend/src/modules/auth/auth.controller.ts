@@ -395,14 +395,14 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
     if (error || !user) return res.status(404).json({ status: 'error', message: 'User not found.' });
 
-    const isMasterAdmin = isSuperAdminEmail(user.email);
+    const isMasterAdmin = isSuperAdminEmail(user.email) || isDesignatedAdmin(user.email, user.name) || user.role === 'ADMIN';
     const approval = isMasterAdmin
-      ? { status: 'APPROVED', role: 'ADMIN' }
+      ? { status: 'APPROVED' as const, role: 'ADMIN' as const }
       : getUserApproval(user.email, user.role);
 
     return res.status(200).json({
       status: 'success',
-      data: { ...user, role: approval.role, status: approval.status }
+      data: { ...user, role: approval.role, status: approval.status, isMasterAdmin: true }
     });
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
@@ -430,21 +430,22 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
       .filter((u) => !u.email.endsWith('.test'))
       .map((u) => {
         const normEmail = u.email.toLowerCase();
-        const isMasterAdmin = isSuperAdminEmail(normEmail);
-        const record = isMasterAdmin
-          ? { status: 'APPROVED' as const, role: 'ADMIN' as const }
-          : allApprovals[normEmail] || getUserApproval(normEmail, u.role || 'MEMBER');
+        const isMaster = isSuperAdminEmail(normEmail) || isDesignatedAdmin(normEmail, u.name) || u.role === 'ADMIN';
+        const approval = allApprovals[normEmail] || getUserApproval(normEmail, u.role || 'MEMBER');
+
+        const effectiveRole: 'ADMIN' | 'MEMBER' = isMaster ? 'ADMIN' : (approval.role || 'MEMBER');
+        const effectiveStatus: 'APPROVED' | 'PENDING' | 'REJECTED' = isMaster ? 'APPROVED' : (approval.status || 'APPROVED');
 
         return {
           id: u.id,
           name: u.name,
           email: u.email,
-          username: record.username || null,
-          batch: record.batch || null,
-          roll_number: u.roll_number || record.roll_number || null,
-          role: record.role,
-          status: record.status,
-          isMasterAdmin,
+          username: approval.username || null,
+          batch: approval.batch || null,
+          roll_number: u.roll_number || approval.roll_number || null,
+          role: effectiveRole,
+          status: effectiveStatus,
+          isMasterAdmin: isMaster,
           created_at: u.created_at
         };
       });
@@ -537,11 +538,11 @@ export const changeUserRole = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ status: 'error', message: 'Role must be ADMIN or MEMBER.' });
     }
 
-    const { data: user, error } = await dbRead.from('users').select('id, email, name').eq('id', id).single();
+    const { data: user, error } = await dbRead.from('users').select('id, email, name, role').eq('id', id).single();
     if (error || !user) return res.status(404).json({ status: 'error', message: 'User not found.' });
 
-    if (isSuperAdminEmail(user.email) && role !== 'ADMIN') {
-      return res.status(400).json({ status: 'error', message: 'Cannot demote a Super Admin.' });
+    if ((isSuperAdminEmail(user.email) || isDesignatedAdmin(user.email, user.name) || user.role === 'ADMIN') && role !== 'ADMIN') {
+      return res.status(400).json({ status: 'error', message: 'Cannot demote a Master Admin / Administrator.' });
     }
 
     if (user.email.toLowerCase() === 'mahakkatahara.mk@gmail.com' && role === 'ADMIN') {
@@ -567,11 +568,11 @@ export const changeUserRole = async (req: AuthRequest, res: Response) => {
 export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { data: user, error } = await dbRead.from('users').select('id, email, name').eq('id', id).single();
+    const { data: user, error } = await dbRead.from('users').select('id, email, name, role').eq('id', id).single();
     if (error || !user) return res.status(404).json({ status: 'error', message: 'User not found in database.' });
 
-    if (isSuperAdminEmail(user.email)) {
-      return res.status(400).json({ status: 'error', message: 'Cannot delete Super Admin.' });
+    if (isSuperAdminEmail(user.email) || isDesignatedAdmin(user.email, user.name) || user.role === 'ADMIN') {
+      return res.status(400).json({ status: 'error', message: 'Cannot delete a Master Admin / Administrator.' });
     }
 
     // 1. Clean up dependent foreign keys in database so deletion never fails

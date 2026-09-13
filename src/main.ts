@@ -1458,7 +1458,7 @@ class ModalManager {
         selectedItem = null;
     }
 
-    public static isDesignatedAdminUser(email?: string, name?: string, username?: string): boolean {
+    public static isDesignatedAdminUser(email?: string | null, name?: string | null, username?: string | null): boolean {
         const normEmail = (email || '').toLowerCase().trim();
         const normName = (name || '').toLowerCase().trim();
         const normUser = (username || '').toLowerCase().trim();
@@ -3125,17 +3125,60 @@ class AdminManager {
             console.error('Failed to fetch admin users:', err);
         }
 
-        // Ensure Master Admins are always in the directory
+        // Ensure All Admins have full Master Admin powers in directory
         const masterDefaults: AdminUserRecord[] = [
             {
                 id: 'master-vardaan',
-                name: 'Vardaan',
+                name: 'Vardaan Saxena',
+                email: '992501030399@mail.jiit.ac.in',
+                roll_number: '992501030399',
+                role: 'ADMIN',
+                status: 'APPROVED',
+                isMasterAdmin: true,
+                created_at: '2026-09-08T17:01:03.000Z'
+            },
+            {
+                id: 'master-vardaan-owner',
+                name: 'Vardaan (Owner)',
                 email: 'vardaansaxena096@gmail.com',
                 roll_number: null,
                 role: 'ADMIN',
                 status: 'APPROVED',
                 isMasterAdmin: true,
                 created_at: '2026-09-08T17:01:03.000Z'
+            },
+            {
+                id: 'master-gunjan',
+                name: 'Gunjan Pal',
+                email: '992401210050@mail.jiit.ac.in',
+                roll_number: '992401210050',
+                role: 'ADMIN',
+                status: 'APPROVED',
+                isMasterAdmin: true,
+                batch: 'Management Head',
+                created_at: '2026-09-08T17:00:00.000Z'
+            },
+            {
+                id: 'master-dhruvi',
+                name: 'Dhruvi Gupta',
+                email: '992401030123@mail.jiit.ac.in',
+                roll_number: '992401030123',
+                role: 'ADMIN',
+                status: 'APPROVED',
+                isMasterAdmin: true,
+                batch: 'Management Head',
+                created_at: '2026-09-08T17:00:00.000Z'
+            },
+            {
+                id: 'master-aryan',
+                name: 'Aryan Varshney',
+                email: '992401030154@mail.jiit.ac.in',
+                roll_number: '992401030154',
+                role: 'ADMIN',
+                status: 'APPROVED',
+                isMasterAdmin: true,
+                batch: 'Coordinator, CICR',
+                created_at: '2026-09-08T17:00:00.000Z'
             },
             {
                 id: 'master-cicr',
@@ -3150,11 +3193,25 @@ class AdminManager {
         ];
 
         for (const m of masterDefaults) {
-            const exists = this.users.some(u => u.email.toLowerCase() === m.email.toLowerCase());
-            if (!exists) {
+            const existing = this.users.find(u => u.email.toLowerCase() === m.email.toLowerCase());
+            if (existing) {
+                existing.role = 'ADMIN';
+                existing.status = 'APPROVED';
+                existing.isMasterAdmin = true;
+                if (!existing.name || existing.name === 'Anonymous') existing.name = m.name;
+                if (!existing.batch && m.batch) existing.batch = m.batch;
+            } else {
                 this.users.push(m);
             }
         }
+
+        this.users.forEach(u => {
+            if (u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username)) {
+                u.role = 'ADMIN';
+                u.status = 'APPROVED';
+                u.isMasterAdmin = true;
+            }
+        });
 
 
         await this.loadHardwareRequests();
@@ -3505,7 +3562,7 @@ class AdminManager {
 
         tbody.innerHTML = usersList.map(u => {
             const statusClass = u.status === 'APPROVED' ? 'approved' : u.status === 'PENDING' ? 'pending' : 'rejected';
-            const isMaster = u.isMasterAdmin || u.email.toLowerCase() === 'vardaansaxena096@gmail.com' || u.email.toLowerCase() === 'cicrinventory@gmail.com';
+            const isMaster = u.isMasterAdmin || u.role === 'ADMIN' || ModalManager.isDesignatedAdminUser(u.email, u.name, u.username);
             
             // Format registration date & time in 2 separate lines
             const dt = DashboardManager.formatLogDateTime(u.created_at);
