@@ -1945,13 +1945,27 @@ class ModalManager {
         }
 
         const nameInput = document.getElementById('borrow-name') as HTMLInputElement | null;
-        if (nameInput && currentUserName) {
-            nameInput.value = currentUserName;
+        if (nameInput) {
+            nameInput.value = currentUserName || '';
+            nameInput.defaultValue = currentUserName || '';
+            nameInput.readOnly = true;
+            nameInput.setAttribute('tabindex', '-1');
+            nameInput.title = 'Verified account identity (locked)';
         }
 
         const rollInput = document.getElementById('borrow-roll') as HTMLInputElement | null;
-        if (rollInput && currentUserRoll) {
-            rollInput.value = currentUserRoll;
+        if (rollInput) {
+            rollInput.value = currentUserRoll || '';
+            rollInput.defaultValue = currentUserRoll || '';
+            if (currentUserRoll) {
+                rollInput.readOnly = true;
+                rollInput.setAttribute('tabindex', '-1');
+                rollInput.title = 'Verified student enrollment ID (locked)';
+            } else {
+                rollInput.readOnly = false;
+                rollInput.removeAttribute('tabindex');
+                rollInput.title = 'Enter your enrollment ID';
+            }
         }
 
         const qtyInput = document.getElementById('borrow-qty') as HTMLInputElement;
