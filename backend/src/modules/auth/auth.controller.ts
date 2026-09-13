@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { supabase } from '../../app';
-import { dbRead } from '../../config/database';
+import { dbWrite, dbRead, supabase } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { isValidEmail } from '../../validators/email.validator';
 import {
@@ -411,10 +410,9 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
     const allApprovals = getAllUserApprovals();
 
     const userList = (users || [])
-      .filter((u) => !u.email.endsWith('.test'))
+      .filter((u) => !u.email.endsWith('.test') && !isPurgedUser(u.email))
       .map((u) => {
         const normEmail = u.email.toLowerCase();
-        unpurgeEmail(normEmail);
         const isMasterAdmin = isSuperAdminEmail(normEmail);
         const record = isMasterAdmin
           ? { status: 'APPROVED' as const, role: 'ADMIN' as const }
@@ -561,22 +559,26 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 
     // 1. Clean up dependent foreign keys in database so deletion never fails
     try {
-      await supabase.from('borrow_records').delete().eq('user_id', id);
-      await supabase.from('audit_logs').update({ user_id: null }).eq('user_id', id);
+      await dbWrite.from('borrow_records').delete().eq('user_id', id);
+      await dbWrite.from('audit_logs').update({ user_id: null }).eq('user_id', id);
     } catch (cleanErr) {
       console.warn('[DELETE USER] Warning while cleaning references:', cleanErr);
     }
 
     // 2. Permanently delete from Supabase PostgreSQL users table
-    const { error: dbDeleteError } = await supabase.from('users').delete().eq('id', id);
+    const { data: deletedRows, error: dbDeleteError } = await dbWrite.from('users').delete().eq('id', id).select();
     if (dbDeleteError) {
       console.error('[DELETE USER ERROR] Supabase users table deletion failed:', dbDeleteError);
       return res.status(500).json({ status: 'error', message: `Database deletion failed: ${dbDeleteError.message}` });
     }
 
+    if (!deletedRows || deletedRows.length === 0) {
+      console.warn('[DELETE USER WARN] 0 rows deleted from users table. If Row Level Security (RLS) is enabled on users table in Supabase, please run backend/migrations/006_allow_admin_manage_users_rls.sql or set SUPABASE_SERVICE_ROLE_KEY.');
+    }
+
     // Also delete by email if ID differed for any reason
     if (user.email) {
-      await supabase.from('users').delete().ilike('email', user.email);
+      await dbWrite.from('users').delete().ilike('email', user.email).select();
     }
 
     // 3. Remove approval and registration state

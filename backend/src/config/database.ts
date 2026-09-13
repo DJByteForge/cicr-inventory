@@ -14,12 +14,16 @@ dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
 const anonKey = process.env.SUPABASE_ANON_KEY || 'placeholder-anon-key';
+const writeKey = process.env.SUPABASE_SERVICE_ROLE_KEY || anonKey;
 const readUrl = process.env.SUPABASE_READ_URL || supabaseUrl;
 
-// Write pool (primary).
-export const dbWrite: SupabaseClient = createClient(supabaseUrl, anonKey);
+// Write pool (uses service_role when provided to bypass RLS, else anon).
+export const dbWrite: SupabaseClient = createClient(supabaseUrl, writeKey);
 
 // Read pool (replica when SUPABASE_READ_URL is configured, else primary).
 export const dbRead: SupabaseClient = createClient(readUrl, anonKey);
+
+// Backward-compatible alias for primary write client.
+export const supabase: SupabaseClient = dbWrite;
 
 export const isReadReplicaConfigured = (): boolean => Boolean(process.env.SUPABASE_READ_URL);
