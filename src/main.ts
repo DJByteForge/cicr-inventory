@@ -2565,8 +2565,10 @@ class ModalManager {
         }
     }
 
+    private static isSubmittingBorrow = false;
+
     private static async handleBorrowSubmit() {
-        if (!selectedItem) return;
+        if (!selectedItem || this.isSubmittingBorrow) return;
 
         const borrowerName = (document.getElementById('borrow-name') as HTMLInputElement).value.trim();
         const rollNum = (document.getElementById('borrow-roll') as HTMLInputElement).value.trim();
@@ -2593,6 +2595,13 @@ class ModalManager {
             return;
         }
 
+        const submitBtn = document.getElementById('borrow-form-submit') as HTMLButtonElement | null;
+        this.isSubmittingBorrow = true;
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Submitting Request...';
+        }
+
         const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
         const userEmail = storedUser.email || (localStorage.getItem('cicr_auth')?.includes('@') ? localStorage.getItem('cicr_auth') : 'vardaansaxena096@gmail.com');
 
@@ -2611,10 +2620,6 @@ class ModalManager {
             requestedAt: date,
             dueDate: dueDate
         };
-
-        // Always save to local requests queue immediately
-        requests.unshift(newReq);
-        DatabaseManager.save();
 
         const requestPayload = {
             id: requestId,
@@ -2636,7 +2641,7 @@ class ModalManager {
         };
 
         try {
-            await fetch(`${API_BASE}/borrow/request`, {
+            const res = await fetch(`${API_BASE}/borrow/request`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2645,6 +2650,12 @@ class ModalManager {
                 body: JSON.stringify(requestPayload)
             });
 
+            if (!res.ok) {
+                // If backend had an issue, keep local record so request is never lost
+                requests.unshift(newReq);
+                DatabaseManager.save();
+            }
+
             (document.getElementById('borrow-form') as HTMLFormElement).reset();
             this.close('borrow-form-modal');
 
@@ -2654,21 +2665,28 @@ class ModalManager {
                 'success'
             );
             DatabaseManager.addLog('borrow', `<span>${borrowerName}</span> requested ${qty}x <span>${selectedItem.name}</span> for '${purpose}'.`);
-            AdminManager.loadHardwareRequests();
+            AdminManager.loadHardwareRequests(true);
             await DatabaseManager.syncFromBackend();
-            return;
         } catch (e: any) {
             console.error('Request API error:', e);
+            // On offline/failover, save locally
+            requests.unshift(newReq);
+            DatabaseManager.save();
             (document.getElementById('borrow-form') as HTMLFormElement).reset();
             this.close('borrow-form-modal');
             ToastManager.show(
                 'Request Transmitted',
-                `Issue request for ${qty}x ${selectedItem.name} submitted for Admin authorization.`,
+                `Issue request for ${qty}x ${selectedItem.name} queued for Admin authorization.`,
                 'success'
             );
             DatabaseManager.addLog('borrow', `<span>${borrowerName}</span> requested ${qty}x <span>${selectedItem.name}</span> for '${purpose}'.`);
-            AdminManager.loadHardwareRequests();
-            return;
+            AdminManager.loadHardwareRequests(true);
+        } finally {
+            this.isSubmittingBorrow = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Submit Issue Request';
+            }
         }
     }
 
@@ -2913,9 +2931,24 @@ class AuthManager {
                     }
                     return;
                 }
+            } else if (res.status === 401 || res.status === 403) {
+                this.handleLogout();
+                return;
             }
         } catch (err) {
-            console.warn('Profile validation check failed:', err);
+            console.warn('Profile validation check failed (server may be waking up):', err);
+        }
+
+        // Resilient Session Recovery: If network/cold-start prevented verification, preserve cached user
+        const cachedUserStr = localStorage.getItem('cicr_user');
+        const cachedAuth = localStorage.getItem('cicr_auth');
+        const cachedRole = (localStorage.getItem('cicr_role') as UserRole) || 'MEMBER';
+        if (cachedUserStr || cachedAuth) {
+            let userObj = null;
+            try { if (cachedUserStr) userObj = JSON.parse(cachedUserStr); } catch {}
+            const fallbackName = userObj?.name || cachedAuth || 'Operator';
+            this.loginSuccess(fallbackName, cachedRole, userObj);
+            return;
         }
 
         this.handleLogout();
@@ -3736,17 +3769,36 @@ class AdminManager {
             }));
 
         // Merge all sources, de-duplicating by id and content
-        const merged: AdminHardwareRequest[] = [...serverList];
-        const seenKeys = new Set(merged.map(m => m.id));
+        const merged: AdminHardwareRequest[] = [];
+        const seenIds = new Set<string>();
+        const seenContent = new Set<string>();
 
+        const makeContentKey = (item: AdminHardwareRequest): string => {
+            const iId = (item.itemId || '').toLowerCase().trim();
+            const bName = (item.borrowerName || '').toLowerCase().trim();
+            const purp = (item.purpose || '').toLowerCase().trim();
+            const qty = Number(item.quantity) || 1;
+            return `${iId}__${bName}__${purp}__${qty}`;
+        };
+
+        // 1. Process server list first (canonical source of truth)
+        for (const item of serverList) {
+            if (!item || item.status !== 'PENDING') continue;
+            const contentKey = makeContentKey(item);
+            if (seenIds.has(item.id) || seenContent.has(contentKey)) continue;
+            seenIds.add(item.id);
+            seenContent.add(contentKey);
+            merged.push(item);
+        }
+
+        // 2. Add localPending items ONLY if they are not already on the server
         for (const item of localPending) {
-            const key = item.id;
-            const contentKey = `${item.itemId}_${item.borrowerName}_${item.purpose}_${item.quantity}`;
-            if (!seenKeys.has(key) && !seenKeys.has(contentKey)) {
-                seenKeys.add(key);
-                seenKeys.add(contentKey);
-                merged.push(item);
-            }
+            if (!item || item.status !== 'PENDING') continue;
+            const contentKey = makeContentKey(item);
+            if (seenIds.has(item.id) || seenContent.has(contentKey)) continue;
+            seenIds.add(item.id);
+            seenContent.add(contentKey);
+            merged.push(item);
         }
 
         this.hardwareRequests = merged;
