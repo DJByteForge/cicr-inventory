@@ -64,16 +64,52 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/test-email', async (req: Request, res: Response) => {
-  const target = (req.query.to as string) || 'vardaansaxena096@gmail.com';
+app.get('/api/smtp-debug', async (req: Request, res: Response) => {
+  const net = await import('net');
+  const dns = await import('dns');
+
+  const testSocket = (host: string, port: number, timeoutMs = 4000): Promise<{ port: number; success: boolean; error?: string; timeMs: number }> => {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const socket = new net.Socket();
+      let finished = false;
+
+      const done = (success: boolean, error?: string) => {
+        if (finished) return;
+        finished = true;
+        socket.destroy();
+        resolve({ port, success, error, timeMs: Date.now() - start });
+      };
+
+      socket.setTimeout(timeoutMs);
+      socket.once('connect', () => done(true));
+      socket.once('timeout', () => done(false, 'ETIMEDOUT (port blocked or no response)'));
+      socket.once('error', (err: any) => done(false, err.message));
+      socket.connect(port, host);
+    });
+  };
+
+  const dnsLookup = (): Promise<any> => {
+    return new Promise((resolve) => {
+      dns.lookup('smtp.gmail.com', { all: true }, (err, addresses) => {
+        resolve(err ? { error: err.message } : addresses);
+      });
+    });
+  };
+
   try {
-    const { sendLoginOtpEmail, isSmtpConfigured } = await import('./services/emailService');
-    const isConfigured = isSmtpConfigured();
-    const result = await sendLoginOtpEmail(target, 'Diagnostic Test', '999888');
+    const [tcp587, tcp465, addresses] = await Promise.all([
+      testSocket('smtp.gmail.com', 587, 4000),
+      testSocket('smtp.gmail.com', 465, 4000),
+      dnsLookup()
+    ]);
+
     res.json({
-      target,
-      smtp_configured: isConfigured,
-      result
+      dns: addresses,
+      tcp_587: tcp587,
+      tcp_465: tcp465,
+      smtp_user: process.env.SMTP_USER || null,
+      smtp_pass_set: Boolean(process.env.SMTP_PASS)
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

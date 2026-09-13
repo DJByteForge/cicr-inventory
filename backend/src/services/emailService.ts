@@ -1,7 +1,13 @@
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import dns from 'dns';
 import { enqueueEmail } from '../config/emailQueue';
+
+// Force IPv4 in Node 18/20/24 on Docker/Render to prevent hanging on IPv6 blackholes
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 
 dotenv.config();
 
@@ -49,18 +55,49 @@ export const getSmtpPass = (): string => {
 
 export const isSmtpConfigured = (): boolean => Boolean(getSmtpUser() && getSmtpPass());
 
+let cachedTransporter: nodemailer.Transporter | null = null;
+let lastTransporterUser = '';
+let lastTransporterPass = '';
+let lastTransporterPort = 0;
+
 export const getTransporter = () => {
-  return nodemailer.createTransport({
+  const user = getSmtpUser();
+  const pass = getSmtpPass();
+  const port = Number(process.env.SMTP_PORT) || 587;
+
+  if (cachedTransporter && user === lastTransporterUser && pass === lastTransporterPass && port === lastTransporterPort) {
+    return cachedTransporter;
+  }
+
+  lastTransporterUser = user;
+  lastTransporterPass = pass;
+  lastTransporterPort = port;
+
+  const isSecure = port === 465;
+
+  cachedTransporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT) || 587,
+    port,
+    secure: isSecure,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
     auth: {
-      user: getSmtpUser(),
-      pass: getSmtpPass(),
+      user,
+      pass,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
+    tls: {
+      rejectUnauthorized: false
+    }
   });
+
+  return cachedTransporter;
 };
 
-// Dynamic transporter proxy to ensure latest runtime environment variables are always used
+// Transporter proxy
 const transporter = {
   sendMail: (options: nodemailer.SendMailOptions) => getTransporter().sendMail(options),
   verify: (callback?: any) => getTransporter().verify(callback)
