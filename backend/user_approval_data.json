@@ -207,6 +207,48 @@
       "name": "Vardaan Saxena",
       "roll_number": "992501030399"
     },
+    "admin.1789341756047@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789341756047@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789342525962@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789342525962@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789343472047@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789343966027@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789344472570@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
     "992501030406@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",

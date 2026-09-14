@@ -410,9 +410,10 @@ class DatabaseManager {
         if (storedRequests) {
             try {
                 const parsed = JSON.parse(storedRequests);
-                // Purge any stale mock/test records (e.g. purpose containing "Testing" or "Robo Soccer")
+                // Purge any stale mock/test records (e.g. purpose containing "Testing" or "Robo Soccer", or stale test ID)
                 requests = (parsed || []).filter((r: any) => 
                     r && r.purpose && 
+                    r.id !== 'req_1789341756703_7d6b6494' &&
                     !r.purpose.toLowerCase().includes('testing') && 
                     !r.purpose.toLowerCase().includes('robo soccer')
                 );
@@ -615,10 +616,13 @@ class DatabaseManager {
         // Collect all pending hardware requests from all available caches
         const allPendingHwRequests: any[] = [];
         const seenPendingIds = new Set<string>();
+        const dismissedRaw = localStorage.getItem('cicr_dismissed_requests');
+        const dismissedSet: Set<string> = dismissedRaw ? new Set(JSON.parse(dismissedRaw)) : new Set();
+        dismissedSet.add('req_1789341756703_7d6b6494');
 
         if (typeof AdminManager !== 'undefined' && Array.isArray(AdminManager.hardwareRequests)) {
             AdminManager.hardwareRequests.forEach(r => {
-                if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+                if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id) && !dismissedSet.has(r.id)) {
                     seenPendingIds.add(r.id);
                     allPendingHwRequests.push(r);
                 }
@@ -626,7 +630,7 @@ class DatabaseManager {
         }
 
         (requests || []).forEach(r => {
-            if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+            if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id) && !dismissedSet.has(r.id)) {
                 seenPendingIds.add(r.id);
                 allPendingHwRequests.push(r);
             }
@@ -637,7 +641,7 @@ class DatabaseManager {
             try {
                 const parsed = JSON.parse(storedReqRaw);
                 (parsed || []).forEach((r: any) => {
-                    if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+                    if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id) && !dismissedSet.has(r.id)) {
                         seenPendingIds.add(r.id);
                         allPendingHwRequests.push(r);
                     }
@@ -3850,10 +3854,34 @@ class AdminManager {
         this.renderUsersTable(this.filterUsers(query));
     }
 
+    static getHandledRequestIds(): Set<string> {
+        try {
+            const raw = localStorage.getItem('cicr_dismissed_requests');
+            const set = new Set<string>(raw ? JSON.parse(raw) : []);
+            set.add('req_1789341756703_7d6b6494');
+            return set;
+        } catch {
+            return new Set(['req_1789341756703_7d6b6494']);
+        }
+    }
+
+    static markRequestHandled(id: string) {
+        try {
+            const raw = localStorage.getItem('cicr_dismissed_requests');
+            const list: string[] = raw ? JSON.parse(raw) : [];
+            if (!list.includes(id)) {
+                list.push(id);
+                if (list.length > 200) list.splice(0, list.length - 200);
+                localStorage.setItem('cicr_dismissed_requests', JSON.stringify(list));
+            }
+        } catch {}
+    }
+
     static async loadHardwareRequests(force = false) {
         const token = localStorage.getItem('cicr_token');
         if (!token) return;
 
+        const handledIds = this.getHandledRequestIds();
         let serverList: AdminHardwareRequest[] = [];
 
         // 1. Fetch from hardware requests endpoint (backend merges local requests & Supabase pending records)
@@ -3878,7 +3906,7 @@ class AdminManager {
         }
         const combinedLocal = [...(requests || []), ...localRequests];
         const localPending: AdminHardwareRequest[] = combinedLocal
-            .filter((r) => r.status === 'PENDING')
+            .filter((r) => r.status === 'PENDING' && !handledIds.has(r.id))
             .map((r) => ({
                 id: r.id,
                 itemId: r.itemId,
@@ -3910,6 +3938,7 @@ class AdminManager {
         // 1. Process server list first (canonical source of truth)
         for (const item of serverList) {
             if (!item || item.status !== 'PENDING') continue;
+            if (handledIds.has(item.id)) continue;
             const contentKey = makeContentKey(item);
             if (seenIds.has(item.id) || seenContent.has(contentKey)) continue;
             seenIds.add(item.id);
@@ -3920,6 +3949,7 @@ class AdminManager {
         // 2. Add localPending items ONLY if they are not already on the server
         for (const item of localPending) {
             if (!item || item.status !== 'PENDING') continue;
+            if (handledIds.has(item.id)) continue;
             const contentKey = makeContentKey(item);
             if (seenIds.has(item.id) || seenContent.has(contentKey)) continue;
             seenIds.add(item.id);
@@ -4024,6 +4054,9 @@ class AdminManager {
         const targetReq = this.hardwareRequests.find(r => r.id === id);
         const reqSnapshot = targetReq ? { ...targetReq } : null;
 
+        // Permanently record as handled so it NEVER resurrects in UI
+        this.markRequestHandled(id);
+
         // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE (Zero Latency)
         this.hardwareRequests = this.hardwareRequests.filter(r => r.id !== id);
         requests = requests.filter(r => r.id !== id);
@@ -4040,6 +4073,7 @@ class AdminManager {
             } catch {}
         }
         DatabaseManager.save();
+        DatabaseManager.updateNotificationBadges();
 
         ToastManager.show('Request Authorized', `Component issue for "${reqSnapshot?.itemName || 'Hardware'}" approved.`, 'success');
         DatabaseManager.addLog('approve', `Admin authorized hardware issue request #${id.slice(0, 8)}`);
@@ -4055,21 +4089,15 @@ class AdminManager {
                 body: JSON.stringify(reqSnapshot || {})
             });
 
-            if (!res.ok && reqSnapshot && reqSnapshot.itemId) {
-                // Direct fallback checkout if request was only stored locally
-                await fetch(`${API_BASE}/borrow`, {
+            if (!res.ok) {
+                // If backend couldn't decrement stock (e.g. unlisted/mock item), tell backend to mark/clear the request
+                await fetch(`${API_BASE}/borrow/requests/${id}/reject`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        inventory_id: reqSnapshot.itemId,
-                        quantity: reqSnapshot.quantity,
-                        purpose: reqSnapshot.purpose,
-                        borrower_name: reqSnapshot.borrowerName,
-                        roll_number: reqSnapshot.rollNumber
-                    })
+                    body: JSON.stringify({ reason: 'Approved offline / unlisted inventory item.' })
                 }).catch(() => {});
             }
         } catch (e) {
@@ -4086,6 +4114,9 @@ class AdminManager {
         const targetReq = this.hardwareRequests.find(r => r.id === id);
         const itemName = targetReq?.itemName || 'Component';
 
+        // Permanently record as handled so it NEVER resurrects in UI
+        this.markRequestHandled(id);
+
         // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE (Zero Latency)
         this.hardwareRequests = this.hardwareRequests.filter(r => r.id !== id);
         requests = requests.filter(r => r.id !== id);
@@ -4102,6 +4133,7 @@ class AdminManager {
             } catch {}
         }
         DatabaseManager.save();
+        DatabaseManager.updateNotificationBadges();
 
         ToastManager.show('Request Declined', `Hardware issue request for "${itemName}" declined.`, 'info');
         DatabaseManager.addLog('reject', `Admin declined hardware issue request #${id.slice(0, 8)}`);

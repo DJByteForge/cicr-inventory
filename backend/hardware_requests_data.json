@@ -29,7 +29,26 @@
     "purpose": "TESTING",
     "durationDays": 7,
     "dueDate": "2026-09-20",
+    "status": "REJECTED",
+    "requestedAt": "2026-09-13T23:22:36.703Z",
+    "reviewedAt": "2026-09-14T12:29:06.309Z",
+    "reviewedBy": "Vardaan",
+    "reviewNote": "Declined by Administrator."
+  },
+  "req_1789391416194_4d2e0c29": {
+    "id": "req_1789391416194_4d2e0c29",
+    "itemId": "0ba6e5bd-df4b-41f3-a3ab-deea93be8502",
+    "itemName": "RUN CAM",
+    "category": "Tools",
+    "borrowerName": "Kushagra Garg",
+    "borrowerEmail": "992501030406@mail.jiit.ac.in",
+    "rollNumber": "992501030406",
+    "userId": "12477309-37cd-4f64-a993-ce5d32522b1c",
+    "quantity": 1,
+    "purpose": "TESTING",
+    "durationDays": 7,
+    "dueDate": "2026-09-21",
     "status": "PENDING",
-    "requestedAt": "2026-09-13T23:22:36.703Z"
+    "requestedAt": "2026-09-14T13:10:16.194Z"
   }
 }
