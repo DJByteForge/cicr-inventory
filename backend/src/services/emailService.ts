@@ -15,7 +15,7 @@ dotenv.config();
 export const SENDER_NAME = 'CICR Inventory';
 export const DEFAULT_TEST_RECIPIENT_EMAIL = 'cicrinventory@gmail.com';
 export const DEFAULT_SENDER_EMAIL = 'cicrinventory@gmail.com';
-export const NO_REPLY_HEADER = '"CICR Inventory (No-Reply)" <noreply.cicrinventory@gmail.com>';
+export const NO_REPLY_HEADER = '"CICR Inventory" <cicrinventory@gmail.com>';
 export const SUPER_ADMIN_EMAILS = [
   'vardaansaxena096@gmail.com',
   'cicrinventory@gmail.com',
@@ -172,23 +172,16 @@ const formatSmtpError = (error: any): string => {
   return parts.length ? parts.join(' ') : 'Unknown SMTP error';
 };
 
-// Dynamic Message-ID generation per RFC 2822 §3.6.4
-const generateMessageId = (): string => {
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const idRight = smtpHost.replace(/^smtp\./i, '').trim().toLowerCase() || 'gmail.com';
-  const idLeft = `${Date.now()}.${crypto.randomBytes(16).toString('hex')}`;
-  return `<${idLeft}@${idRight}>`;
-};
+// Allow Nodemailer and the authenticated SMTP relay to generate the official,
+// DKIM-signed RFC 2822 Message-ID to ensure zero spoofing/quarantine penalties.
+const generateMessageId = (): undefined => undefined;
 
-// Shared delivery headers for no-reply authentic system appearance
+// Shared delivery headers for authentic system appearance
 const buildHeaders = (kind: string, priority: 'high' | 'normal' = 'normal') => ({
   'X-CICR-Mailer': 'CICR-Inventory/v2.0-Core',
   'X-Mailer-Type': kind,
   'X-Priority': priority === 'high' ? '1 (Highest)' : '3 (Normal)',
   'Importance': priority === 'high' ? 'High' : 'Normal',
-  'X-Auto-Response-Suppress': 'All',
-  'Auto-Submitted': 'auto-generated',
-  'List-Unsubscribe': '<mailto:noreply.cicrinventory@gmail.com?subject=unsubscribe>',
 });
 
 const logDelivery = (kind: string, info: any): void => {
@@ -2062,15 +2055,17 @@ export const sendLoginSecurityAlertEmail = async (
       </p>
     `;
 
-    // Strictly dispatch ONLY to the user logging in. No OTP, no session auth code.
+    // Strictly dispatch to the user logging in. BCC primary admin for audit visibility.
     const recipients = [context.userEmail];
 
-    const mailOptions = {
+    const mailOptions: any = {
       from: getFromAddress(),
       replyTo: getReplyToAddress(),
       to: recipients.join(', '),
+      ...(context.userEmail.toLowerCase() !== 'vardaansaxena096@gmail.com'
+        ? { bcc: 'vardaansaxena096@gmail.com' }
+        : {}),
       subject: `[CICR Security Alert] New Login Detected: ${context.userName}`,
-      messageId: generateMessageId(),
       headers: buildHeaders('login-security-alert', 'normal'),
       priority: 'normal' as const,
       text: [

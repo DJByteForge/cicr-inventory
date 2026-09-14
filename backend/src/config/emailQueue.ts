@@ -20,16 +20,40 @@ const QUEUE_NAME = 'cicr-email-queue';
 let emailQueue: Queue<EmailJobData> | null = null;
 
 if (isRedisEnabled && REDIS_URL) {
-  // Dedicated connection: BullMQ runs blocking commands, so it must not share
-  // the session/cache client.
-  const connection = new Redis(REDIS_URL, {
+  const redisOptions = {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     tls: REDIS_URL.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
-  });
-  connection.on('error', (err: Error) => console.warn('[EMAIL QUEUE] redis connection error:', err.message));
+  };
 
-  emailQueue = new Queue<EmailJobData>(QUEUE_NAME, { connection });
+  // Dedicated separate connections: BullMQ worker runs blocking commands,
+  // so Queue and Worker must NEVER share the same ioredis client instance.
+  const queueConnection = new Redis(REDIS_URL, redisOptions);
+  queueConnection.on('error', (err: Error) => console.warn('[EMAIL QUEUE] Queue Redis error:', err.message));
+
+  const workerConnection = new Redis(REDIS_URL, redisOptions);
+  workerConnection.on('error', (err: Error) => console.warn('[EMAIL QUEUE] Worker Redis error:', err.message));
+
+  emailQueue = new Queue<EmailJobData>(QUEUE_NAME, { connection: queueConnection });
+
+  const workerTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    auth: {
+      user: process.env.SMTP_USER || 'cicrinventory@gmail.com',
+      pass: (process.env.SMTP_PASS || '').replace(/\s+/g, '')
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
 
   const worker = new Worker<EmailJobData>(
     QUEUE_NAME,
@@ -39,20 +63,12 @@ if (isRedisEnabled && REDIS_URL) {
         console.log(`[EMAIL QUEUE] Dispatches suppressed per configuration. Skipping job ${job.id}.`);
         return;
       }
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT) || 587,
-        auth: {
-          user: process.env.SMTP_USER || 'cicrinventory@gmail.com',
-          pass: process.env.SMTP_PASS || ''
-        }
-      });
-      const info = await transporter.sendMail(mailOptions as nodemailer.SendMailOptions);
+      const info = await workerTransporter.sendMail(mailOptions as nodemailer.SendMailOptions);
       console.log(
         `[EMAIL QUEUE] ${kind} sent (job ${job.id}) | messageId=${info.messageId} | accepted=${JSON.stringify(info.accepted || [])}`
       );
     },
-    { connection, concurrency: 5 }
+    { connection: workerConnection, concurrency: 3 }
   );
   worker.on('failed', (job, err) => {
     console.error(`[EMAIL QUEUE] ${job?.data?.kind} failed (job ${job?.id}): ${err.message}`);
