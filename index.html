@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
     <title>CICR Inventory</title>
 
     <!-- Primary Meta Tags -->
@@ -312,11 +312,11 @@
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                             </svg>
-                            <span class="notif-radar-beacon"></span>
+                            <span class="notif-radar-beacon" id="sidebar-notif-beacon" style="display: none;"></span>
                         </div>
                         <span class="btn-text">NOTIFICATIONS</span>
                     </div>
-                    <span class="badge notif-hud-badge" id="sidebar-notif-badge">5</span>
+                    <span class="badge notif-hud-badge" id="sidebar-notif-badge" style="display: none;">0</span>
                 </button>
 
                 <!-- Navigation Links Section -->
@@ -504,7 +504,7 @@
                                 <div class="dash-card-icon-wrapper">
                                     <i data-lucide="code-2"></i>
                                 </div>
-                                <span class="dash-card-tag">CREATIVE TEAM</span>
+                                <span class="dash-card-tag">THE CREATORS</span>
                             </div>
                             <div class="dash-card-body">
                                 <h3 class="dash-card-title">Meet The Developers</h3>
@@ -1036,13 +1036,17 @@
                                 <div class="admin-block-title-wrap">
                                     <i data-lucide="users" class="text-cyan"></i>
                                     <h3>Registered Users Directory</h3>
-                                    <span class="admin-badge-count count-cyan" id="admin-users-total-badge">0 USERS</span>
+                                    <span class="admin-badge-count count-cyan" id="admin-users-total-badge">0
+                                        USERS</span>
                                 </div>
                                 <div class="admin-audit-controls admin-users-controls">
                                     <div class="admin-audit-filter-pills" id="admin-users-role-pills">
-                                        <button class="audit-pill active" data-user-filter="all" id="pill-filter-all">ALL</button>
-                                        <button class="audit-pill" data-user-filter="admin" id="pill-filter-admin">ADMINISTRATORS</button>
-                                        <button class="audit-pill" data-user-filter="member" id="pill-filter-member">MEMBERS</button>
+                                        <button class="audit-pill active" data-user-filter="all"
+                                            id="pill-filter-all">ALL</button>
+                                        <button class="audit-pill" data-user-filter="admin"
+                                            id="pill-filter-admin">ADMINISTRATORS</button>
+                                        <button class="audit-pill" data-user-filter="member"
+                                            id="pill-filter-member">MEMBERS</button>
                                     </div>
                                     <div class="admin-search-wrapper admin-users-search-wrap">
                                         <i data-lucide="search"></i>
@@ -1322,10 +1326,15 @@
                         <h2>Notifications & Telemetry</h2>
                         <p id="notif-drawer-subtitle">Operational alerts, loan schedules & system updates</p>
                     </div>
-                </div>
-                <div class="notif-role-badge" id="notif-drawer-role-badge">
-                    <span class="role-dot" id="notif-role-dot"></span>
-                    <span id="notif-role-text">ADMIN TELEMETRY</span>
+                <div class="notif-header-actions-row">
+                    <div class="notif-role-badge" id="notif-drawer-role-badge">
+                        <span class="role-dot" id="notif-role-dot"></span>
+                        <span id="notif-role-text">ADMIN TELEMETRY</span>
+                    </div>
+                    <button class="notif-clear-btn" id="notif-clear-all-btn" title="Mark all alerts as viewed">
+                        <i data-lucide="check-check"></i>
+                        <span>Mark All Read</span>
+                    </button>
                 </div>
             </div>
 

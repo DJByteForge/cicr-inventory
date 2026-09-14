@@ -427,6 +427,7 @@ class DatabaseManager {
 
         // Immediately auto-sync with Supabase backend without delay
         this.syncFromBackend();
+        this.updateNotificationBadges();
     }
 
     static async syncFromBackend() {
@@ -530,6 +531,8 @@ class DatabaseManager {
             }
         } catch (err) {
             console.error('Realtime Supabase sync failed:', err);
+        } finally {
+            this.updateNotificationBadges();
         }
     }
 
@@ -539,6 +542,8 @@ class DatabaseManager {
         localStorage.setItem('cicr_requests', JSON.stringify(requests));
         this.updateNotificationBadges();
     }
+
+    static isNotificationsCleared: boolean = false;
 
     static updateNotificationBadges() {
         const todayStr = new Date().toISOString().split('T')[0];
@@ -560,10 +565,10 @@ class DatabaseManager {
             return false;
         };
 
-        const isUserRequest = (req: RequestRecord) => {
-            const rName = (req.name || '').toLowerCase().trim();
-            const rRoll = (req.roll || '').toLowerCase().trim();
-            const rEmail = ((req as any).email || '').toLowerCase().trim();
+        const isUserRequest = (req: any) => {
+            const rName = (req.name || req.borrowerName || '').toLowerCase().trim();
+            const rRoll = (req.roll || req.rollNumber || '').toLowerCase().trim();
+            const rEmail = (req.email || req.borrowerEmail || '').toLowerCase().trim();
             if (userRoll && rRoll && rRoll === userRoll) return true;
             if (userEmail && rEmail && rEmail === userEmail) return true;
             if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
@@ -573,14 +578,17 @@ class DatabaseManager {
 
         let overdueCount = 0;
         let activeLoansCount = 0;
-        let lowStockCount = 0;
+        let depletedStockCount = 0;
 
         inventory.forEach((item) => {
+            const total = Number(item.quantity) || 0;
             const available = typeof item.availableQuantity === 'number'
                 ? item.availableQuantity
-                : item.quantity;
-            if (isAdmin && available <= 2 && available > 0) {
-                lowStockCount++;
+                : total;
+
+            // Only count as critical stock alert if item is completely depleted (0 available out of >0 total)
+            if (isAdmin && available <= 0 && total > 0) {
+                depletedStockCount++;
             }
 
             (item.borrowedBy || []).forEach((rec) => {
@@ -604,32 +612,93 @@ class DatabaseManager {
             });
         });
 
-        const pendingReqs = isAdmin
-            ? requests.filter(r => r.status === 'PENDING').length
-            : requests.filter(r => isUserRequest(r) && r.status === 'PENDING').length;
+        // Collect all pending hardware requests from all available caches
+        const allPendingHwRequests: any[] = [];
+        const seenPendingIds = new Set<string>();
 
-        // Admin badge counts critical actions: overdues + pending requests + low reserves
-        // Member badge counts user loans, overdue notices & pending requests
-        const totalAlerts = isAdmin
-            ? (overdueCount + pendingReqs + lowStockCount)
-            : (overdueCount + activeLoansCount + pendingReqs);
-
-        const sidebarBadge = document.getElementById('sidebar-notif-badge');
-        if (sidebarBadge) {
-            sidebarBadge.innerText = String(totalAlerts);
-            sidebarBadge.style.display = totalAlerts > 0 ? 'inline-flex' : 'none';
-            sidebarBadge.classList.toggle('pulse', totalAlerts > 0);
+        if (typeof AdminManager !== 'undefined' && Array.isArray(AdminManager.hardwareRequests)) {
+            AdminManager.hardwareRequests.forEach(r => {
+                if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+                    seenPendingIds.add(r.id);
+                    allPendingHwRequests.push(r);
+                }
+            });
         }
 
+        (requests || []).forEach(r => {
+            if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+                seenPendingIds.add(r.id);
+                allPendingHwRequests.push(r);
+            }
+        });
+
+        const storedReqRaw = localStorage.getItem('cicr_requests');
+        if (storedReqRaw) {
+            try {
+                const parsed = JSON.parse(storedReqRaw);
+                (parsed || []).forEach((r: any) => {
+                    if (r && r.status === 'PENDING' && !seenPendingIds.has(r.id)) {
+                        seenPendingIds.add(r.id);
+                        allPendingHwRequests.push(r);
+                    }
+                });
+            } catch {}
+        }
+
+        const pendingHwCount = isAdmin
+            ? allPendingHwRequests.length
+            : allPendingHwRequests.filter(r => isUserRequest(r)).length;
+
+        let pendingUsersCount = 0;
+        if (isAdmin && typeof AdminManager !== 'undefined' && Array.isArray(AdminManager.users)) {
+            pendingUsersCount = AdminManager.users.filter(u => u.status === 'PENDING').length;
+        }
+
+        let totalAlerts = 0;
+        if (this.isNotificationsCleared) {
+            totalAlerts = 0;
+        } else if (isAdmin) {
+            totalAlerts = overdueCount + pendingHwCount + pendingUsersCount + depletedStockCount;
+        } else {
+            totalAlerts = overdueCount + activeLoansCount + pendingHwCount;
+        }
+
+        const sidebarBadge = document.getElementById('sidebar-notif-badge');
+        const sidebarBeacon = document.getElementById('sidebar-notif-beacon') || (document.querySelector('.notif-radar-beacon') as HTMLElement | null);
         const navBadge = document.getElementById('nav-bell-badge');
-        if (navBadge) {
-            navBadge.innerText = String(totalAlerts);
-            navBadge.style.display = totalAlerts > 0 ? 'inline-flex' : 'none';
-            navBadge.classList.toggle('pulse', totalAlerts > 0);
+
+        if (totalAlerts > 0) {
+            if (sidebarBadge) {
+                sidebarBadge.innerText = String(totalAlerts);
+                sidebarBadge.style.display = 'inline-flex';
+                sidebarBadge.classList.add('pulse');
+            }
+            if (sidebarBeacon) {
+                sidebarBeacon.style.display = 'block';
+            }
+            if (navBadge) {
+                navBadge.innerText = String(totalAlerts);
+                navBadge.style.display = 'inline-flex';
+                navBadge.classList.add('pulse');
+            }
+        } else {
+            if (sidebarBadge) {
+                sidebarBadge.innerText = '0';
+                sidebarBadge.style.display = 'none';
+                sidebarBadge.classList.remove('pulse');
+            }
+            if (sidebarBeacon) {
+                sidebarBeacon.style.display = 'none';
+            }
+            if (navBadge) {
+                navBadge.innerText = '0';
+                navBadge.style.display = 'none';
+                navBadge.classList.remove('pulse');
+            }
         }
     }
 
-    static startAutoSync(intervalMs = 30000) {
+    static startAutoSync(intervalMs = 6000) {
         if ((window as any)._cicrAutoSyncTimer) {
             clearInterval((window as any)._cicrAutoSyncTimer);
         }
@@ -639,14 +708,11 @@ class DatabaseManager {
 
             await this.syncFromBackend();
             const role = ModalManager.getCurrentRole();
-            if (role === 'ADMIN') {
-                const adminSection = document.getElementById('admin-view');
-                const isAdminVisible = adminSection && !adminSection.classList.contains('hidden') && adminSection.style.display !== 'none';
-                if (isAdminVisible && typeof AdminManager !== 'undefined') {
-                    // Only poll lightweight hardware requests if user is actively in Admin portal
-                    AdminManager.loadHardwareRequests();
-                }
+            if (role === 'ADMIN' && typeof AdminManager !== 'undefined') {
+                await AdminManager.loadHardwareRequests();
+                await AdminManager.loadUsers();
             }
+            this.updateNotificationBadges();
         }, intervalMs);
     }
 
@@ -2014,10 +2080,10 @@ class ModalManager {
             return false;
         };
 
-        const isUserRequest = (req: RequestRecord) => {
-            const rName = (req.name || '').toLowerCase().trim();
-            const rRoll = (req.roll || '').toLowerCase().trim();
-            const rEmail = ((req as any).email || '').toLowerCase().trim();
+        const isUserRequest = (req: any) => {
+            const rName = (req.name || req.borrowerName || '').toLowerCase().trim();
+            const rRoll = (req.roll || req.rollNumber || '').toLowerCase().trim();
+            const rEmail = (req.email || req.borrowerEmail || '').toLowerCase().trim();
             if (userRoll && rRoll && rRoll === userRoll) return true;
             if (userEmail && rEmail && rEmail === userEmail) return true;
             if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
@@ -2080,6 +2146,17 @@ class ModalManager {
             });
         }
 
+        // Setup Mark All Read button
+        const clearBtn = document.getElementById('notif-clear-all-btn');
+        if (clearBtn && !clearBtn.dataset.bound) {
+            clearBtn.dataset.bound = 'true';
+            clearBtn.addEventListener('click', () => {
+                DatabaseManager.isNotificationsCleared = true;
+                DatabaseManager.updateNotificationBadges();
+                ToastManager.show('Notifications Cleared', 'All current alerts marked as read.', 'info');
+            });
+        }
+
         // Highlight active tab button
         if (tabsBar) {
             tabsBar.querySelectorAll('.notif-tab-btn').forEach(btn => {
@@ -2120,19 +2197,40 @@ class ModalManager {
         const lowStockList: InventoryItem[] = [];
         if (isAdmin) {
             inventory.forEach((item) => {
+                const total = Number(item.quantity) || 0;
                 const available = typeof item.availableQuantity === 'number'
                     ? item.availableQuantity
-                    : item.quantity;
-                if (available <= 2 && available >= 0) {
+                    : total;
+                const isDepleted = (available <= 0 && total > 0) || (total >= 3 && available <= 1) || (total <= 2 && available < total);
+                if (isDepleted) {
                     lowStockList.push(item);
                 }
             });
         }
 
         // --- 3. GATHER REQUESTS DATA ---
-        const visibleRequests: RequestRecord[] = isAdmin
-            ? [...requests]
-            : requests.filter(r => isUserRequest(r));
+        const combinedRequests: (RequestRecord | AdminHardwareRequest)[] = [];
+        const seenDrawerReqIds = new Set<string>();
+
+        if (typeof AdminManager !== 'undefined' && Array.isArray(AdminManager.hardwareRequests)) {
+            AdminManager.hardwareRequests.forEach(r => {
+                if (r && !seenDrawerReqIds.has(r.id)) {
+                    seenDrawerReqIds.add(r.id);
+                    combinedRequests.push(r);
+                }
+            });
+        }
+
+        (requests || []).forEach(r => {
+            if (r && !seenDrawerReqIds.has(r.id)) {
+                seenDrawerReqIds.add(r.id);
+                combinedRequests.push(r);
+            }
+        });
+
+        const visibleRequests: any[] = isAdmin
+            ? combinedRequests
+            : combinedRequests.filter(r => isUserRequest(r));
 
         // --- 4. GATHER SYSTEM LOGS DATA ---
         const visibleLogs: ActivityLog[] = isAdmin
@@ -2357,22 +2455,34 @@ class ModalManager {
             // Bind inline action buttons for admin
             if (isAdmin) {
                 container.querySelectorAll<HTMLButtonElement>('.notif-btn-approve').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         const reqId = btn.getAttribute('data-req-id');
                         if (reqId) {
-                            ModalManager.reviewRequest(reqId, 'APPROVED');
-                            ToastManager.show('Request Approved', 'Component checked out and loan logged.', 'success');
+                            if (typeof AdminManager !== 'undefined' && typeof AdminManager.approveHardware === 'function') {
+                                await AdminManager.approveHardware(reqId);
+                            } else {
+                                ModalManager.reviewRequest(reqId, 'APPROVED');
+                            }
+                            DatabaseManager.isNotificationsCleared = false;
+                            DatabaseManager.updateNotificationBadges();
+                            ModalManager.renderLogsDrawer();
                         }
                     });
                 });
                 container.querySelectorAll<HTMLButtonElement>('.notif-btn-reject').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         const reqId = btn.getAttribute('data-req-id');
                         if (reqId) {
-                            ModalManager.reviewRequest(reqId, 'REJECTED');
-                            ToastManager.show('Request Rejected', 'Requisition declined.', 'info');
+                            if (typeof AdminManager !== 'undefined' && typeof AdminManager.rejectHardware === 'function') {
+                                await AdminManager.rejectHardware(reqId);
+                            } else {
+                                ModalManager.reviewRequest(reqId, 'REJECTED');
+                            }
+                            DatabaseManager.isNotificationsCleared = false;
+                            DatabaseManager.updateNotificationBadges();
+                            ModalManager.renderLogsDrawer();
                         }
                     });
                 });
@@ -3501,8 +3611,8 @@ interface AdminHardwareRequest {
 }
 
 class AdminManager {
-    private static users: AdminUserRecord[] = [];
-    private static hardwareRequests: AdminHardwareRequest[] = [];
+    public static users: AdminUserRecord[] = [];
+    public static hardwareRequests: AdminHardwareRequest[] = [];
     private static auditLogs: any[] = [];
     private static activeAuditCategory = 'all';
     private static auditSearchTerm = '';

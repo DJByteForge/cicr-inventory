@@ -73,6 +73,15 @@ A large frontend pass (~2,500 line diff across `index.html`, `src/main.ts`, `src
 - **Developer Showcase Overhaul**: Added verified LinkedIn & GitHub SVG icons, refined coordinator and mentor guidance credits.
 - **Session & Infrastructure Hardening**: Resilient user session preservation across Render cold starts; removed prestart tsc to eliminate cloud OOM; dynamic backend failover.
 
+## 8. Version 2.8.1 — Mobile & Desktop Responsive Overhaul, Touch Interaction Optimization & Notification Telemetry Fix
+
+- **Mobile & Desktop Fully Responsive System**: Eliminated cramped 3-column mobile layout; cards now display in a spacious single column on mobile devices ($\le 640\text{px}$) with natural multi-line title wrapping, while preserving multi-column desktop grids.
+- **Swipeable Horizontal Tag Selector**: Stacks search input and category filter pills on mobile/tablet viewports ($\le 1100\text{px}$) with frictionless horizontal touch scrolling (`-webkit-overflow-scrolling: touch;`).
+- **Balanced 2x2 Stats Dashboard Grid**: Restructured the 4-in-a-line quick stats bar into a clean $2\times 2$ grid on mobile and tablet screens, ensuring labels and counters never overlap.
+- **Adaptive Greeting & Digital Clock**: Dashboard greeting card gracefully collapses into a stacked layout on mobile with an integrated horizontal clock bar (date on left, digital time on right with border separator).
+- **Touch & Interactivity Polish**: Enforced `touch-action: manipulation` across all buttons, cards, and pills to eliminate 300ms mobile tap delays; added tactile `:active` tap scale transitions; isolated mouse `:hover` effects using `@media (hover: hover) and (pointer: fine)`.
+- **Notification & Telemetry Sync**: Exposed required admin request queues in `AdminManager`, synchronized badge counters across sidebar and drawer, and wired inline one-click drawer approvals/rejections with real-time refresh.
+
 ---
 
 ## Net effect

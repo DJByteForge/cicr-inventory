@@ -70,8 +70,9 @@ Track, reserve, and deploy microcontrollers, sensors, and actuators from JIIT's 
 | **v2.6.0** | ✅ Released | **10-Min OTP Verification Popup, 10-Min Cooldown Gap, 5-Field Registration & Real-Time Audit Stream.** Security verification popup modal for sign-in requiring 6-digit email OTP (strictly valid for 10 minutes with enforced 10-minute gap before new OTP generation), 5-field registration (`Name`, `Email`, `Username`, `Enrollment Number`, `Batch`), flexible sign-in via Email/Username/Name, real-time System Audit & Activity Logs stream (`#admin-audit-section`), in-app item deletion, 6-second auto-sync engine, zero mock data. |
 | **v2.7.0** | ✅ Released | **Master Whitelist Enforcement, Theme Background Hardening & Complete Database Purge.** All test/pending data cleared across Supabase PostgreSQL tables (`borrow_records`, hardware issue requests, `audit_logs`, `inventory`, and non-admin user accounts); database strictly holds dual master superadmins (`vardaansaxena096@gmail.com` and `cicrinventory@gmail.com`); theme backgrounds hardened with `!important` rule overrides and dynamic client-side cloud API failover. |
 | **v2.8.0** | ✅ Released | **Zero-Latency 1-Click Approvals, Request De-duplication Engine, Tamper-Proof Autofilled Borrower Lock, Complete 54-Item Catalog & Cold-Start Session Recovery.** Instant optimistic UI card removal for hardware and member authorizations; atomic submit lock with composite content-based request de-duplication; automated read-only prefill for student borrower credentials; comprehensive 54-component robotics inventory with 500-unit limit; updated developer roster with crisp SVG links; and backend memory caching (15s TTL) with cold-start resilient auth recovery. |
+| **v2.8.1** | ✅ Released | **Mobile & Desktop Responsive Overhaul, Touch Interaction Optimization & Notification Telemetry Fix.** Comprehensive responsive overhaul across mobile and desktop; single-column catalog grid on mobile ($\le 640\text{px}$) with natural multi-line titles, smooth horizontal swipeable category pills, balanced 2x2 stats grid, responsive dashboard greeting & digital clock cockpit, 300ms tap latency removal via `touch-action: manipulation`, tactile active tap feedback, and real-time notification telemetry counter sync. |
 
-> The current active release is **v2.8.0 — Zero-Latency 1-Click Approvals, Request Queue De-duplication, Tamper-Proof Autofilled Borrower Lock & Complete 54-Item Catalog**. Both the Vercel frontend and Render backend run in production with live database sync, multi-tier hardware queues, real-time activity auditing, and automated transactional telemetry.
+> The current active release is **v2.8.1 — Mobile & Desktop Responsive Overhaul, Touch Interaction Optimization & Notification Telemetry Fix**. Both the Vercel frontend and Render backend run in production with live database sync, multi-tier hardware queues, real-time activity auditing, and automated transactional telemetry.
 
 ### 🏷️ Version Registry (Git Tags)
 
@@ -89,6 +90,7 @@ Track, reserve, and deploy microcontrollers, sensors, and actuators from JIIT's 
 | **v2.6.0** | `v2.6.0`, `v2.6` | ✅ Released | 10-Min OTP Popup, 10-Min Cooldown Gap, 5-Field Registration & Audit Stream |
 | **v2.7.0** | `v2.7.0` | ✅ Released | Database Purge, Master Admin Whitelist & Theme Engine Hardening |
 | **v2.8.0** | `v2.8.0`, `v2.8` | ✅ Released | 1-Click Approvals, Request De-duplication, Locked Borrower Details & 54-Item Catalog |
+| **v2.8.1** | `v2.8.1`, `v2.8` | ✅ Released | Mobile & Desktop Responsive Overhaul, Touch Interaction & Telemetry Sync |
 
 ---
 
