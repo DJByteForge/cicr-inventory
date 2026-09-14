@@ -48,7 +48,10 @@
     "purpose": "TESTING",
     "durationDays": 7,
     "dueDate": "2026-09-21",
-    "status": "PENDING",
-    "requestedAt": "2026-09-14T13:10:16.194Z"
+    "status": "REJECTED",
+    "requestedAt": "2026-09-14T13:10:16.194Z",
+    "reviewedAt": "2026-09-14T21:45:22.425Z",
+    "reviewedBy": "System Reset",
+    "reviewNote": "Resolved during full inventory return reset."
   }
 }

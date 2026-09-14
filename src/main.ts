@@ -60,6 +60,39 @@ let logs: ActivityLog[] = [];
 let requests: RequestRecord[] = [];
 let selectedItem: InventoryItem | null = null;
 
+/**
+ * Resolves component stock status per specification:
+ * - If total <= 1 (quantity = 1):
+ *     available > 0  => "Available" (status-available)
+ *     available <= 0 => "Not Available" (status-out)
+ * - If total > 1:
+ *     available <= 0 => "Not Available" (status-out)
+ *     available > total / 2 => "Available" (status-available)
+ *     available <= total / 2 => "Low Reserve" (status-low)
+ */
+function getItemStockStatus(totalQty: number, availableQty: number): {
+    text: string;
+    class: 'status-available' | 'status-low' | 'status-out';
+} {
+    const total = Number(totalQty) || 0;
+    const available = Number(availableQty) || 0;
+
+    if (total <= 1) {
+        if (available > 0) {
+            return { text: 'Available', class: 'status-available' };
+        }
+        return { text: 'Not Available', class: 'status-out' };
+    }
+
+    if (available <= 0) {
+        return { text: 'Not Available', class: 'status-out' };
+    }
+    if (available > total / 2) {
+        return { text: 'Available', class: 'status-available' };
+    }
+    return { text: 'Low Reserve', class: 'status-low' };
+}
+
 // ==========================================
 // 1.5. Real-Time Floating Cyber Toast Notifications
 // ==========================================
@@ -1307,7 +1340,7 @@ class DashboardManager {
             } else {
                 const labels: Record<string, string> = {
                     borrowed: 'Active Loans',
-                    low: 'Low Reserves (≤ 2)',
+                    low: 'Low Reserves (≤ 50%)',
                     out: 'Out of Stock'
                 };
                 const filterText = labels[this.activeStockFilter] || this.activeStockFilter;
@@ -1353,9 +1386,10 @@ class DashboardManager {
                 checkedOutQty += memberLoans.reduce((sum, rec) => sum + rec.qty, 0);
             }
 
-            if (currentAvailable <= 0) {
+            const status = getItemStockStatus(item.quantity, currentAvailable);
+            if (status.class === 'status-out') {
                 outOfStockCount++;
-            } else if (currentAvailable <= 2) {
+            } else if (status.class === 'status-low') {
                 lowStockCount++;
             }
         });
@@ -1390,9 +1424,11 @@ class DashboardManager {
                     matchesStock = (item.borrowedBy || []).some(r => !r.returned && ModalManager.isUserLoanMatch(r));
                 }
             } else if (this.activeStockFilter === 'low') {
-                matchesStock = available > 0 && available <= 2;
+                const status = getItemStockStatus(item.quantity, available);
+                matchesStock = status.class === 'status-low';
             } else if (this.activeStockFilter === 'out') {
-                matchesStock = available === 0;
+                const status = getItemStockStatus(item.quantity, available);
+                matchesStock = status.class === 'status-out';
             }
 
             return matchesCategory && matchesSearch && matchesStock;
@@ -1465,29 +1501,9 @@ class DashboardManager {
             : Math.max(0, item.quantity - borrowedSum);
 
         const totalQty = Number(item.quantity) || 0;
-        let statusText = 'Available';
-        let statusClass = 'status-available';
-
-        if (totalQty === 1) {
-            if (available > 0) {
-                statusText = 'Available';
-                statusClass = 'status-available';
-            } else {
-                statusText = 'Not Available';
-                statusClass = 'status-out';
-            }
-        } else if (totalQty > 1) {
-            if (available === 0) {
-                statusText = 'Not Available';
-                statusClass = 'status-out';
-            } else {
-                statusText = 'Ask in Person';
-                statusClass = 'status-ask-person';
-            }
-        } else {
-            statusText = 'Not Available';
-            statusClass = 'status-out';
-        }
+        const status = getItemStockStatus(totalQty, available);
+        const statusText = status.text;
+        const statusClass = status.class;
 
         const catMap: Record<string, string> = {
             microcontrollers: "MCU",
@@ -2017,33 +2033,14 @@ class ModalManager {
         const role = this.getCurrentRole();
 
         const totalQty = Number(item.quantity) || 0;
-        if (totalQty === 1) {
-            if (available > 0) {
-                badge.innerText = 'Available';
-                badge.classList.add('status-available');
-                borrowBtn.disabled = false;
-                borrowBtn.style.opacity = '1';
-            } else {
-                badge.innerText = 'Not Available';
-                badge.classList.add('status-out');
-                borrowBtn.disabled = true;
-                borrowBtn.style.opacity = '0.5';
-            }
-        } else if (totalQty > 1) {
-            if (available === 0) {
-                badge.innerText = 'Not Available';
-                badge.classList.add('status-out');
-                borrowBtn.disabled = true;
-                borrowBtn.style.opacity = '0.5';
-            } else {
-                badge.innerText = 'Ask in Person';
-                badge.classList.add('status-ask-person');
-                borrowBtn.disabled = false;
-                borrowBtn.style.opacity = '1';
-            }
+        const status = getItemStockStatus(totalQty, available);
+        badge.innerText = status.text;
+        badge.className = `modal-status-badge ${status.class}`;
+
+        if (available > 0) {
+            borrowBtn.disabled = false;
+            borrowBtn.style.opacity = '1';
         } else {
-            badge.innerText = 'Not Available';
-            badge.classList.add('status-out');
             borrowBtn.disabled = true;
             borrowBtn.style.opacity = '0.5';
         }

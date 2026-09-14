@@ -249,6 +249,18 @@
       "username": "Test",
       "batch": "N/A"
     },
+    "admin.1789399905459@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789404904988@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
     "992501030406@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
