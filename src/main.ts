@@ -855,7 +855,7 @@ class DashboardManager {
         return { dateStr: s, timeStr: '' };
     }
 
-    private setMobileSidebar(open: boolean) {
+    public setMobileSidebar(open: boolean) {
         const shouldOpen = open && window.innerWidth <= 1100;
         this.mobileSidebarOpen = shouldOpen;
         this.appContainer.classList.toggle('sidebar-open', shouldOpen);
@@ -863,6 +863,7 @@ class DashboardManager {
         if (this.mobileSidebarBackdrop) {
             this.mobileSidebarBackdrop.style.display = shouldOpen ? 'block' : 'none';
         }
+        document.body.style.overflow = shouldOpen ? 'hidden' : '';
     }
 
     private startClock() {
@@ -933,6 +934,16 @@ class DashboardManager {
             closeMobileSidebar();
         });
 
+        const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+        sidebarCloseBtn?.addEventListener('click', () => {
+            closeMobileSidebar();
+        });
+
+        const sidebarResetPassBtn = document.getElementById('sidebar-reset-pass-btn');
+        sidebarResetPassBtn?.addEventListener('click', () => {
+            closeMobileSidebar();
+        });
+
         window.addEventListener('resize', () => {
             if (window.innerWidth > 1100) {
                 closeMobileSidebar();
@@ -944,6 +955,10 @@ class DashboardManager {
                 closeMobileSidebar();
             }
         });
+
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
 
         // 1. Sidebar Nav click listeners
         const sidebarLinks = document.querySelectorAll('.sidebar-nav-link');
@@ -1112,6 +1127,7 @@ class DashboardManager {
         const notifBtn = document.getElementById('sidebar-notifications-btn');
         if (notifBtn) {
             notifBtn.addEventListener('click', () => {
+                closeMobileSidebar();
                 ModalManager.openLogsDrawer();
             });
         }
