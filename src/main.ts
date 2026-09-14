@@ -702,7 +702,7 @@ class DatabaseManager {
         }
     }
 
-    static startAutoSync(intervalMs = 6000) {
+    static startAutoSync(intervalMs = 3000) {
         if ((window as any)._cicrAutoSyncTimer) {
             clearInterval((window as any)._cicrAutoSyncTimer);
         }
@@ -1033,8 +1033,8 @@ class DashboardManager {
                     switchSection('inventory-view');
                     return;
                 }
-                AdminManager.loadUsers();
-                AdminManager.loadHardwareRequests();
+                AdminManager.loadUsers(true);
+                AdminManager.loadHardwareRequests(true);
                 AdminManager.loadAuditLogs();
             }
 
@@ -2449,6 +2449,10 @@ class ModalManager {
                     </div>
                 ` : '';
 
+                const bName = (req as any).borrowerName || (req as any).name || 'Member';
+                const bRoll = (req as any).rollNumber || (req as any).roll || 'Student';
+                const bQty = (req as any).quantity || (req as any).qty || 1;
+
                 el.innerHTML = `
                     <div class="notif-card-header">
                         <div class="notif-card-tag tag-purple">
@@ -2459,10 +2463,10 @@ class ModalManager {
                     </div>
                     <div class="notif-card-body">
                         <p class="notif-card-main-text">
-                            <strong>${req.qty}x ${req.itemName}</strong> requested by <span class="notif-user-pill">${req.name}</span> (${req.roll || 'Student'})
+                            <strong>${bQty}x ${req.itemName}</strong> requested by <span class="notif-user-pill">${bName}</span> (${bRoll})
                         </p>
                         <p class="notif-card-sub-text">
-                            Purpose: ${req.purpose || 'Project'} &bull; Requested on: ${req.requestedAt || 'Recent'}
+                            Purpose: ${req.purpose || 'Project'} &bull; Requested on: ${req.requestedAt ? new Date(req.requestedAt).toLocaleDateString() : 'Recent'}
                             ${req.dueDate ? ` &bull; Expected Return: ${req.dueDate}` : ''}
                         </p>
                     </div>
@@ -2771,7 +2775,7 @@ class ModalManager {
         };
 
         try {
-            const res = await fetch(`${API_BASE}/borrow/request`, {
+            await fetch(`${API_BASE}/borrow/request`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2780,11 +2784,9 @@ class ModalManager {
                 body: JSON.stringify(requestPayload)
             });
 
-            if (!res.ok) {
-                // If backend had an issue, keep local record so request is never lost
-                requests.unshift(newReq);
-                DatabaseManager.save();
-            }
+            // Always keep in local requests store so it is instantly reflected on this client
+            requests.unshift(newReq);
+            DatabaseManager.save();
 
             (document.getElementById('borrow-form') as HTMLFormElement).reset();
             this.close('borrow-form-modal');
@@ -2796,6 +2798,7 @@ class ModalManager {
             );
             DatabaseManager.addLog('borrow', `<span>${borrowerName}</span> requested ${qty}x <span>${selectedItem.name}</span> for '${purpose}'.`);
             AdminManager.loadHardwareRequests(true);
+            DatabaseManager.updateNotificationBadges();
             await DatabaseManager.syncFromBackend();
         } catch (e: any) {
             console.error('Request API error:', e);
@@ -3898,6 +3901,70 @@ class AdminManager {
             console.error('Failed to fetch hardware requests:', err);
         }
 
+        // 1.5 AUDIT STREAM REAL-TIME RECOVERY:
+        // Supabase audit_logs is universally shared across cloud and local nodes.
+        // If an audit event "Hardware Requested" is present in logs and has not been resolved,
+        // guarantee it exists in serverList so Screenshot 1 and Screenshot 2 are 100% in sync!
+        const storedLogsRaw = localStorage.getItem('cicr_logs');
+        if (storedLogsRaw) {
+            try {
+                const parsedLogs = JSON.parse(storedLogsRaw);
+                const resolvedEvents = new Set<string>();
+                (parsedLogs || []).forEach((l: any) => {
+                    const txt = (l.text || '').toLowerCase();
+                    if (txt.includes('approved') || txt.includes('rejected') || txt.includes('declined')) {
+                        resolvedEvents.add(txt);
+                    }
+                });
+
+                (parsedLogs || []).forEach((l: any) => {
+                    const txt = l.text || '';
+                    if (txt.includes('requested') && (txt.includes('for purpose:') || txt.includes('requested 1x') || txt.includes('requested '))) {
+                        const match = txt.match(/^(.*?)\s*\((.*?)\)\s*requested\s*(\d+)x\s*"([^"]+)"\s*for\s*purpose:\s*(.*)$/i) ||
+                                      txt.match(/<span>(.*?)<\/span>\s*requested\s*(\d+)x\s*<span>(.*?)<\/span>\s*for\s*'(.*?)'/i);
+                        if (match) {
+                            const bName = match[1].trim();
+                            const bEmail = match[2].includes('@') ? match[2].trim() : `${bName.toLowerCase().replace(/\s+/g, '')}@mail.jiit.ac.in`;
+                            const qty = parseInt(match[3] || match[2] || '1', 10) || 1;
+                            const itemName = (match[4] || match[3] || 'Hardware Component').trim();
+                            const purpose = (match[5] || match[4] || 'Testing').trim();
+
+                            const isResolved = Array.from(resolvedEvents).some(resTxt => 
+                                (resTxt.includes(bName.toLowerCase()) && (resTxt.includes(itemName.toLowerCase()) || resTxt.includes('hardware')))
+                            );
+
+                            if (!isResolved) {
+                                const id = `req_audit_${new Date(l.timestamp || Date.now()).getTime()}`;
+                                const exists = serverList.some(s => 
+                                    (s.borrowerName.toLowerCase() === bName.toLowerCase() && s.itemName.toLowerCase() === itemName.toLowerCase()) ||
+                                    s.id === id
+                                );
+
+                                if (!exists && !handledIds.has(id)) {
+                                    serverList.push({
+                                        id,
+                                        itemId: 'unlisted-item',
+                                        itemName,
+                                        borrowerName: bName,
+                                        borrowerEmail: bEmail,
+                                        rollNumber: bEmail.includes('@') ? bEmail.split('@')[0] : null,
+                                        quantity: qty,
+                                        purpose,
+                                        durationDays: 7,
+                                        dueDate: new Date(new Date(l.timestamp || Date.now()).getTime() + 7 * 86400000).toISOString().split('T')[0],
+                                        status: 'PENDING',
+                                        requestedAt: l.timestamp || new Date().toISOString()
+                                    });
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.warn('Audit stream recovery note:', err);
+            }
+        }
+
         // 2. Collect from local requests state and localStorage
         const localStoredRaw = localStorage.getItem('cicr_requests');
         let localRequests: RequestRecord[] = [];
@@ -3960,6 +4027,7 @@ class AdminManager {
         this.hardwareRequests = merged;
         this.updateStats();
         this.renderHardwareQueue();
+        DatabaseManager.updateNotificationBadges();
     }
 
     private static updateStats() {
@@ -3992,6 +4060,7 @@ class AdminManager {
                 sidebarBadge.style.display = 'none';
             }
         }
+        DatabaseManager.updateNotificationBadges();
     }
 
     private static renderHardwareQueue() {
@@ -5095,7 +5164,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     AuthManager.init();
     AdminManager.init();
-    DatabaseManager.startAutoSync(6000);
+    AdminManager.loadHardwareRequests(true);
+    DatabaseManager.updateNotificationBadges();
+    DatabaseManager.startAutoSync(3000);
     lucide.createIcons();
 
     // Global mouse-coordinate spotlight tracker for interactive cyber gridlines

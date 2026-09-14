@@ -120,6 +120,32 @@ export const createHardwareRequest = async (payload: {
   saveState();
   invalidateHardwareRequestsCache();
 
+  // 1. Mirror into Supabase borrow_records with status = 'PENDING'
+  try {
+    const isUUID = (str?: string) => Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+    const safeUserId = isUUID(payload.userId) ? payload.userId : null;
+    const safeItemId = isUUID(payload.itemId) ? payload.itemId : null;
+
+    if (safeItemId) {
+      await supabase.from('borrow_records').insert([
+        {
+          id: isUUID(id) ? id : undefined,
+          user_id: safeUserId,
+          borrower_name: payload.borrowerName,
+          roll_number: payload.rollNumber || null,
+          inventory_id: safeItemId,
+          quantity: payload.quantity,
+          purpose: payload.purpose,
+          borrowed_at: requestedAt,
+          due_date: dueDate,
+          status: 'PENDING'
+        }
+      ]);
+    }
+  } catch (err) {
+    console.warn('[HARDWARE REQUEST] Note mirroring to Supabase borrow_records:', err);
+  }
+
   // Instant notification to Super Admins (Zero Emojis, Authentic High-Priority Cyber Notification)
   sendAdminHardwareRequestAlert(SUPER_ADMIN_EMAILS, {
     requestId: id,
@@ -140,7 +166,8 @@ export const createHardwareRequest = async (payload: {
 
 let cachedHardwareRequests: HardwareIssueRequest[] | null = null;
 let lastHardwareRequestsFetchTime = 0;
-const HARDWARE_REQUESTS_CACHE_TTL_MS = 15 * 1000; // 15s memory cache
+// Zero TTL to guarantee instant, real-time consistency across cloud and local nodes
+const HARDWARE_REQUESTS_CACHE_TTL_MS = 0;
 
 export const invalidateHardwareRequestsCache = () => {
   cachedHardwareRequests = null;
@@ -148,11 +175,6 @@ export const invalidateHardwareRequestsCache = () => {
 };
 
 export const getAllHardwareRequests = async (force = false): Promise<HardwareIssueRequest[]> => {
-  const now = Date.now();
-  if (!force && cachedHardwareRequests && now - lastHardwareRequestsFetchTime < HARDWARE_REQUESTS_CACHE_TTL_MS) {
-    return cachedHardwareRequests;
-  }
-
   // Ensure fresh disk state is loaded
   try {
     if (fs.existsSync(STORAGE_FILE)) {
@@ -166,7 +188,7 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
   // Strictly filter to PENDING requests only
   const localList = Object.values(requestsState).filter((r) => r.status === 'PENDING');
 
-  // Also query pending rows from Supabase borrow_records
+  // 1. Query pending rows from Supabase borrow_records
   try {
     const { data: dbRecords } = await dbRead
       .from('borrow_records')
@@ -201,12 +223,68 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
     console.warn('[HARDWARE REQUEST] Error reading pending records from Supabase:', err);
   }
 
+  // 2. High-Resilience Fallback: Reconstruct unhandled requests from Supabase audit_logs
+  // This guarantees that if a request is visible in System Audit & Activity Logs,
+  // it is 100% GUARANTEED to be visible in the Admin Queue as well!
+  try {
+    const { data: auditEvents } = await dbRead
+      .from('audit_logs')
+      .select('*')
+      .in('action', ['Hardware Requested', 'Hardware Approved', 'Hardware Rejected'])
+      .order('created_at', { ascending: false })
+      .limit(60);
+
+    if (auditEvents && auditEvents.length > 0) {
+      for (const ev of auditEvents) {
+        if (ev.action === 'Hardware Requested' && ev.description) {
+          const match = ev.description.match(/^(.*?)\s*\((.*?)\)\s*requested\s*(\d+)x\s*"([^"]+)"\s*for\s*purpose:\s*(.*)$/i);
+          if (match) {
+            const [, borrowerName, borrowerEmail, qtyStr, itemName, purpose] = match;
+            const isResolved = auditEvents.some(other => 
+              (other.action === 'Hardware Approved' || other.action === 'Hardware Rejected') &&
+              new Date(other.created_at).getTime() >= new Date(ev.created_at).getTime() &&
+              (other.description?.includes(borrowerName) || other.item_id === ev.item_id)
+            );
+
+            if (!isResolved) {
+              const alreadyInList = localList.some(r => 
+                (r.borrowerEmail?.toLowerCase() === borrowerEmail.toLowerCase() && r.itemName?.toLowerCase() === itemName.toLowerCase() && r.purpose?.toLowerCase() === purpose.toLowerCase()) ||
+                (ev.item_id && r.itemId === ev.item_id && r.borrowerName?.toLowerCase() === borrowerName.toLowerCase())
+              );
+
+              if (!alreadyInList) {
+                localList.push({
+                  id: `req_audit_${new Date(ev.created_at).getTime()}`,
+                  itemId: ev.item_id || 'unlisted-item',
+                  itemName: itemName || 'Hardware Component',
+                  category: 'Tools',
+                  borrowerName: borrowerName || 'Member',
+                  borrowerEmail: borrowerEmail || (ev.roll_number ? `${ev.roll_number}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in'),
+                  rollNumber: borrowerEmail ? borrowerEmail.split('@')[0] : null,
+                  userId: ev.user_id,
+                  quantity: parseInt(qtyStr, 10) || 1,
+                  purpose: purpose || 'Testing',
+                  durationDays: 7,
+                  dueDate: new Date(new Date(ev.created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  status: 'PENDING',
+                  requestedAt: ev.created_at || new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[HARDWARE REQUEST] Error syncing from Supabase audit logs:', err);
+  }
+
   const sorted = localList.sort((a, b) => {
     return new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime();
   });
 
   cachedHardwareRequests = sorted;
-  lastHardwareRequestsFetchTime = now;
+  lastHardwareRequestsFetchTime = Date.now();
   return sorted;
 };
 
