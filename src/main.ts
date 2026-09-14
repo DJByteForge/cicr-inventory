@@ -944,8 +944,11 @@ class DashboardManager {
         });
 
         const sidebarResetPassBtn = document.getElementById('sidebar-reset-pass-btn');
-        sidebarResetPassBtn?.addEventListener('click', () => {
+        sidebarResetPassBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             closeMobileSidebar();
+            PasswordResetManager.open();
         });
 
         window.addEventListener('resize', () => {
@@ -1136,7 +1139,17 @@ class DashboardManager {
             });
         }
 
-
+        // 5. Password Reset / Change Key trigger
+        const resetPassBtn = document.getElementById('sidebar-reset-pass-btn');
+        if (resetPassBtn && !resetPassBtn.dataset.bound) {
+            resetPassBtn.dataset.bound = 'true';
+            resetPassBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeMobileSidebar();
+                PasswordResetManager.open();
+            });
+        }
 
         // 6. Profile Logout button
         const logoutBtn = document.getElementById('sidebar-logout-btn');
@@ -1540,7 +1553,7 @@ class ModalManager {
     static init() {
         document.querySelectorAll('.close-modal, .modal-overlay').forEach(el => {
             el.addEventListener('click', (e) => {
-                if (e.target === el || el.classList.contains('close-modal')) {
+                if (e.target === el || el.classList.contains('close-modal') || (e.target as HTMLElement)?.closest('.close-modal')) {
                     this.closeAll();
                 }
             });
@@ -3439,28 +3452,31 @@ class AuthManager {
 // 6.5 Password Reset & Credential Sync Manager (No OTP)
 // ==========================================
 class PasswordResetManager {
-    private static resetModal: HTMLElement;
-    private static directForm: HTMLFormElement;
-    private static identifierInput: HTMLInputElement;
-    private static newPassInput: HTMLInputElement;
-    private static confirmPassInput: HTMLInputElement;
-    private static errorEl: HTMLElement;
+    private static resetModal: HTMLElement | null = null;
+    private static directForm: HTMLFormElement | null = null;
+    private static identifierInput: HTMLInputElement | null = null;
+    private static newPassInput: HTMLInputElement | null = null;
+    private static confirmPassInput: HTMLInputElement | null = null;
+    private static errorEl: HTMLElement | null = null;
 
     static init() {
-        this.resetModal = document.getElementById('reset-password-modal')!;
-        this.directForm = document.getElementById('reset-direct-form') as HTMLFormElement;
-        this.identifierInput = document.getElementById('reset-identifier') as HTMLInputElement;
-        this.newPassInput = document.getElementById('reset-new-password') as HTMLInputElement;
-        this.confirmPassInput = document.getElementById('reset-confirm-password') as HTMLInputElement;
-        this.errorEl = document.getElementById('reset-error')!;
+        this.resetModal = document.getElementById('reset-password-modal');
+        this.directForm = document.getElementById('reset-direct-form') as HTMLFormElement | null;
+        this.identifierInput = document.getElementById('reset-identifier') as HTMLInputElement | null;
+        this.newPassInput = document.getElementById('reset-new-password') as HTMLInputElement | null;
+        this.confirmPassInput = document.getElementById('reset-confirm-password') as HTMLInputElement | null;
+        this.errorEl = document.getElementById('reset-error');
 
         // Password visibility toggles
         const newPassToggle = document.getElementById('reset-new-pass-toggle');
-        if (newPassToggle && this.newPassInput) {
-            newPassToggle.addEventListener('click', () => {
+        if (newPassToggle && this.newPassInput && !newPassToggle.dataset.bound) {
+            newPassToggle.dataset.bound = 'true';
+            newPassToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.newPassInput) return;
                 const isPass = this.newPassInput.type === 'password';
                 this.newPassInput.type = isPass ? 'text' : 'password';
-                const icon = newPassToggle.querySelector('i');
+                const icon = newPassToggle.querySelector('i, svg');
                 if (icon) {
                     icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
                     lucide.createIcons();
@@ -3469,11 +3485,14 @@ class PasswordResetManager {
         }
 
         const confirmPassToggle = document.getElementById('reset-confirm-pass-toggle');
-        if (confirmPassToggle && this.confirmPassInput) {
-            confirmPassToggle.addEventListener('click', () => {
+        if (confirmPassToggle && this.confirmPassInput && !confirmPassToggle.dataset.bound) {
+            confirmPassToggle.dataset.bound = 'true';
+            confirmPassToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.confirmPassInput) return;
                 const isPass = this.confirmPassInput.type === 'password';
                 this.confirmPassInput.type = isPass ? 'text' : 'password';
-                const icon = confirmPassToggle.querySelector('i');
+                const icon = confirmPassToggle.querySelector('i, svg');
                 if (icon) {
                     icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
                     lucide.createIcons();
@@ -3481,46 +3500,74 @@ class PasswordResetManager {
             });
         }
 
-        if (this.directForm) {
+        if (this.directForm && !this.directForm.dataset.bound) {
+            this.directForm.dataset.bound = 'true';
             this.directForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.handleDirectReset();
             });
         }
+
+        (window as any).openPasswordResetModal = () => this.open();
     }
 
     static open() {
+        this.init();
+        if (!this.resetModal) {
+            this.resetModal = document.getElementById('reset-password-modal');
+        }
         if (!this.resetModal) return;
+
         if (this.directForm) this.directForm.reset();
         if (this.errorEl) this.errorEl.style.display = 'none';
 
-        // Pre-fill with current user's email or login input if available
-        const currentLoginVal = (document.getElementById('login-username') as HTMLInputElement)?.value.trim();
-        const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
-        const defaultId = storedUser.email || currentLoginVal || '';
+        // Pre-fill with current user's email, roll number, or identifier
+        let defaultId = '';
+        try {
+            const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
+            defaultId = storedUser.email || storedUser.roll_number || storedUser.username || '';
+        } catch {}
+
+        if (!defaultId) {
+            defaultId = localStorage.getItem('cicr_auth') || '';
+        }
+        if (!defaultId) {
+            const currentLoginVal = (document.getElementById('login-username') as HTMLInputElement)?.value.trim();
+            defaultId = currentLoginVal || '';
+        }
+
         if (defaultId && this.identifierInput) {
             this.identifierInput.value = defaultId;
         }
 
         this.resetModal.classList.add('active');
         lucide.createIcons();
-        if (this.identifierInput) this.identifierInput.focus();
+
+        if (defaultId && this.newPassInput) {
+            setTimeout(() => this.newPassInput?.focus(), 150);
+        } else if (this.identifierInput) {
+            setTimeout(() => this.identifierInput?.focus(), 150);
+        }
     }
 
     static close() {
+        if (!this.resetModal) {
+            this.resetModal = document.getElementById('reset-password-modal');
+        }
         if (this.resetModal) {
             this.resetModal.classList.remove('active');
         }
     }
 
     private static async handleDirectReset() {
+        if (!this.identifierInput || !this.newPassInput || !this.confirmPassInput) return;
         const identifier = this.identifierInput.value.trim();
         const newPassword = this.newPassInput.value;
         const confirmPassword = this.confirmPassInput.value;
-        this.errorEl.style.display = 'none';
+        if (this.errorEl) this.errorEl.style.display = 'none';
 
         if (!identifier) {
-            this.showError('Please enter your college email or enrollment number.');
+            this.showError('Please enter your college email, enrollment number, or username.');
             return;
         }
 
@@ -3534,7 +3581,7 @@ class PasswordResetManager {
             return;
         }
 
-        const submitBtn = document.getElementById('btn-submit-reset-direct') as HTMLButtonElement;
+        const submitBtn = document.getElementById('btn-submit-reset-direct') as HTMLButtonElement | null;
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Updating Database...`;
@@ -3554,30 +3601,33 @@ class PasswordResetManager {
             const data = await res.json();
 
             if (!res.ok) {
-                this.showError(data.message || 'Password reset failed. Please check your email/enrollment.');
+                this.showError(data.message || 'Password reset failed. Please check your account identifier.');
                 return;
             }
 
             // Successfully updated password in database!
             ToastManager.show(
                 'Password Updated & Synced',
-                'Your new password has been saved directly to the database! You can now log in.',
+                'Your password has been successfully updated in the CICR database.',
                 'success'
             );
 
             this.close();
 
-            // Pre-populate login form with email and switch to login view
-            const loginUser = document.getElementById('login-username') as HTMLInputElement;
-            if (loginUser) loginUser.value = identifier;
-            const loginPass = document.getElementById('login-password') as HTMLInputElement;
-            if (loginPass) {
-                loginPass.value = newPassword;
-                loginPass.focus();
-            }
+            const isCurrentlyLoggedIn = Boolean(localStorage.getItem('cicr_token') || localStorage.getItem('cicr_auth'));
+            if (!isCurrentlyLoggedIn) {
+                // Pre-populate login form with email and switch to login view
+                const loginUser = document.getElementById('login-username') as HTMLInputElement | null;
+                if (loginUser) loginUser.value = identifier;
+                const loginPass = document.getElementById('login-password') as HTMLInputElement | null;
+                if (loginPass) {
+                    loginPass.value = newPassword;
+                    loginPass.focus();
+                }
 
-            document.getElementById('go-to-login')?.click();
-            DatabaseManager.addLog('system', `Password successfully updated for ${identifier}.`);
+                document.getElementById('go-to-login')?.click();
+            }
+            DatabaseManager.addLog('system', `Password successfully updated in vault database for ${identifier}.`);
         } catch (err) {
             this.showError('Network error. Unable to contact authentication server.');
         } finally {
@@ -3590,11 +3640,16 @@ class PasswordResetManager {
     }
 
     private static showError(msg: string) {
-        this.errorEl.innerText = msg;
-        this.errorEl.style.display = 'block';
-        this.errorEl.style.animation = 'none';
-        this.errorEl.offsetHeight;
-        this.errorEl.style.animation = 'shake-error 0.4s ease';
+        if (!this.errorEl) {
+            this.errorEl = document.getElementById('reset-error');
+        }
+        if (this.errorEl) {
+            this.errorEl.innerText = msg;
+            this.errorEl.style.display = 'block';
+            this.errorEl.style.animation = 'none';
+            this.errorEl.offsetHeight;
+            this.errorEl.style.animation = 'shake-error 0.4s ease';
+        }
     }
 }
 
@@ -5051,6 +5106,7 @@ declare global {
         adminDeleteItem?: (id: string, name: string) => void;
         adminApproveHardware?: (id: string) => void;
         adminRejectHardware?: (id: string) => void;
+        openPasswordResetModal?: () => void;
     }
 }
 
@@ -5070,35 +5126,50 @@ class ThemeManager {
         this.navThemeSelectEl = document.getElementById('nav-theme-select') as HTMLSelectElement;
         this.headerThemeSelectEl = document.getElementById('header-theme-select') as HTMLSelectElement;
 
-        let savedTheme = localStorage.getItem('cicr_vault_theme') || 'cyberpunk';
-        if (savedTheme === 'matrix' || savedTheme === 'midnight' || savedTheme === 'avengers') {
-            savedTheme = 'cyberpunk';
-            localStorage.setItem('cicr_vault_theme', 'cyberpunk');
-            localStorage.setItem('cicr_theme', 'dark');
-        }
-        this.applyTheme(savedTheme);
+        const defaultTheme = localStorage.getItem('cicr_vault_theme') || 'cyberpunk';
+        this.applyTheme(defaultTheme);
 
         if (this.themeSelectEl) {
-            this.themeSelectEl.value = savedTheme;
+            this.themeSelectEl.value = defaultTheme;
             this.themeSelectEl.addEventListener('change', (e) => {
-                const target = e.target as HTMLSelectElement;
-                this.applyTheme(target.value);
+                const val = (e.target as HTMLSelectElement).value;
+                this.applyTheme(val);
             });
         }
 
         if (this.navThemeSelectEl) {
-            this.navThemeSelectEl.value = savedTheme;
+            this.navThemeSelectEl.value = defaultTheme;
             this.navThemeSelectEl.addEventListener('change', (e) => {
-                const target = e.target as HTMLSelectElement;
-                this.applyTheme(target.value);
+                const val = (e.target as HTMLSelectElement).value;
+                this.applyTheme(val);
             });
         }
 
         if (this.headerThemeSelectEl) {
-            this.headerThemeSelectEl.value = savedTheme;
+            this.headerThemeSelectEl.value = defaultTheme;
             this.headerThemeSelectEl.addEventListener('change', (e) => {
-                const target = e.target as HTMLSelectElement;
-                this.applyTheme(target.value);
+                const val = (e.target as HTMLSelectElement).value;
+                this.applyTheme(val);
+            });
+        }
+
+        const themeBtnDark = document.getElementById('theme-btn-dark');
+        const themeBtnLight = document.getElementById('theme-btn-light');
+        const themeBtnPink = document.getElementById('theme-btn-pink');
+
+        if (themeBtnDark) {
+            themeBtnDark.addEventListener('click', () => {
+                this.applyTheme('cyberpunk');
+            });
+        }
+        if (themeBtnLight) {
+            themeBtnLight.addEventListener('click', () => {
+                this.applyTheme('light');
+            });
+        }
+        if (themeBtnPink) {
+            themeBtnPink.addEventListener('click', () => {
+                this.applyTheme('sakura');
             });
         }
     }
@@ -5161,6 +5232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.init();
     DatabaseManager.init();
     ModalManager.init();
+    PasswordResetManager.init();
 
     AuthManager.init();
     AdminManager.init();

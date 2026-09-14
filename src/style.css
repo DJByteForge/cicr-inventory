@@ -1871,7 +1871,7 @@ body.theme-light .auth-card input::placeholder,
     height: 100vh;
     background: rgba(3, 3, 8, 0.6);
     backdrop-filter: blur(12px);
-    z-index: 100;
+    z-index: 50000; /* High z-index to always overlay navbar (20000), sidebar (100), and auth screens (1000) */
     display: flex;
     align-items: center;
     justify-content: center;

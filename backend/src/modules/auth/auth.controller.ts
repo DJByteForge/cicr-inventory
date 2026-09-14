@@ -648,7 +648,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     const normId = loginId.toLowerCase();
 
-    // Lookup user in DB by email or roll_number
+    // Lookup user in DB by email, roll_number, username, or name
     let user: any = null;
     const { data: byEmail } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', normId).maybeSingle();
     if (byEmail) {
@@ -659,7 +659,22 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 
     if (!user) {
-      return res.status(404).json({ status: 'error', message: 'No registered user found with that email or enrollment number.' });
+      const { data: byUser } = await dbRead.from('users').select('id, name, email, password_hash').ilike('username', normId).maybeSingle();
+      if (byUser) user = byUser;
+    }
+
+    if (!user) {
+      const { data: byName } = await dbRead.from('users').select('id, name, email, password_hash').ilike('name', normId).maybeSingle();
+      if (byName) user = byName;
+    }
+
+    if (!user && !normId.includes('@')) {
+      const { data: byEmailPrefix } = await dbRead.from('users').select('id, name, email, password_hash').ilike('email', `${normId}@%`).maybeSingle();
+      if (byEmailPrefix) user = byEmailPrefix;
+    }
+
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'No registered user found with that email, enrollment number, or username.' });
     }
 
     // If current_password is provided, verify it
