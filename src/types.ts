@@ -12,6 +12,9 @@ export interface BorrowRecord {
 
 export interface RequestRecord {
     id: string;
+    type?: 'ISSUE' | 'RETURN';
+    borrowId?: string;
+    returnQuantity?: number;
     itemId: string;
     itemName: string;
     name: string;

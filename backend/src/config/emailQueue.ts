@@ -22,7 +22,11 @@ let emailQueue: Queue<EmailJobData> | null = null;
 if (isRedisEnabled && REDIS_URL) {
   // Dedicated connection: BullMQ runs blocking commands, so it must not share
   // the session/cache client.
-  const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  const connection = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    tls: REDIS_URL.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
+  });
   connection.on('error', (err: Error) => console.warn('[EMAIL QUEUE] redis connection error:', err.message));
 
   emailQueue = new Queue<EmailJobData>(QUEUE_NAME, { connection });

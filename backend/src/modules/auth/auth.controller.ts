@@ -340,9 +340,7 @@ export const login = async (req: Request, res: Response) => {
       role: effectiveRole,
       ip: (req.headers['x-forwarded-for'] as string) || req.ip,
       userAgent: req.headers['user-agent'],
-      loginTime: new Date(),
-      sessionCode: 'SESSION-' + Math.floor(100000 + Math.random() * 900000).toString(),
-      validityMinutes: 10
+      loginTime: new Date()
     }).catch((e) => console.error('[EMAIL ERROR] Failed to send login alert:', e));
 
     logAuditEvent({
@@ -648,7 +646,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     const normId = loginId.toLowerCase();
 
-    // Lookup user in DB by email, roll_number, username, or name
+    // Lookup user in DB by email, roll_number, name, or master admin aliases
     let user: any = null;
     const { data: byEmail } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', normId).maybeSingle();
     if (byEmail) {
@@ -656,11 +654,6 @@ export const resetPassword = async (req: Request, res: Response) => {
     } else {
       const { data: byRoll } = await dbRead.from('users').select('id, name, email, password_hash').eq('roll_number', loginId).maybeSingle();
       if (byRoll) user = byRoll;
-    }
-
-    if (!user) {
-      const { data: byUser } = await dbRead.from('users').select('id, name, email, password_hash').ilike('username', normId).maybeSingle();
-      if (byUser) user = byUser;
     }
 
     if (!user) {
@@ -673,15 +666,45 @@ export const resetPassword = async (req: Request, res: Response) => {
       if (byEmailPrefix) user = byEmailPrefix;
     }
 
+    // Master admin aliases
     if (!user) {
-      return res.status(404).json({ status: 'error', message: 'No registered user found with that email, enrollment number, or username.' });
+      if (['srvkiller09', 'vardaan', 'vardaansaxena'].includes(normId)) {
+        const { data } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', 'vardaansaxena096@gmail.com').maybeSingle();
+        if (data) user = data;
+      } else if (['cicradmin', 'cicrinventory', 'cicr admin'].includes(normId)) {
+        const { data } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', 'cicrinventory@gmail.com').maybeSingle();
+        if (data) user = data;
+      }
     }
 
-    // If current_password is provided, verify it
-    if (current_password && user.password_hash) {
+    // Local approvals lookup fallback
+    if (!user) {
+      const match = findUserApprovalByIdentifier(loginId);
+      if (match) {
+        const { data } = await dbRead.from('users').select('id, name, email, password_hash').eq('email', match.email).maybeSingle();
+        if (data) user = data;
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'No registered user found with that email, enrollment number, or name.' });
+    }
+
+    // Security requirement: Current password must be provided to authenticate password change
+    if (!current_password) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Current password is required to verify your identity before updating credentials.' 
+      });
+    }
+
+    if (user.password_hash) {
       const isMatch = await bcrypt.compare(current_password, user.password_hash);
       if (!isMatch) {
-        return res.status(400).json({ status: 'error', message: 'Current password is incorrect.' });
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Current password is incorrect. Please verify and re-enter your existing password.' 
+        });
       }
     }
 
@@ -697,6 +720,14 @@ export const resetPassword = async (req: Request, res: Response) => {
     if (updateErr) {
       console.error('[RESET PASSWORD ERROR] Failed to update password in DB:', updateErr);
       return res.status(500).json({ status: 'error', message: 'Failed to update password in database.' });
+    }
+
+    // Dispatch security notification email to user
+    if (user.email) {
+      sendPasswordChangedSuccessEmail(user.email, {
+        userName: user.name || 'Member',
+        changedAt: new Date()
+      }).catch((e) => console.error('[EMAIL ERROR] Failed to send password changed confirmation email:', e));
     }
 
     logAuditEvent({

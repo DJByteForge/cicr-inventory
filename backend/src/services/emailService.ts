@@ -25,6 +25,20 @@ export const SUPER_ADMIN_EMAILS = [
   '992401030154@mail.jiit.ac.in'  // Aryan Varshney
 ];
 
+export const getAdminNotificationRecipients = async (): Promise<string[]> => {
+  const adminSet = new Set<string>(SUPER_ADMIN_EMAILS.map((e) => e.toLowerCase()));
+  try {
+    const { getAllAdminEmails } = await import('../modules/auth/userApprovalService');
+    const dbEmails = await getAllAdminEmails();
+    if (dbEmails && dbEmails.length > 0) {
+      dbEmails.forEach((e) => adminSet.add(e.toLowerCase()));
+    }
+  } catch (err) {
+    console.warn('[EMAIL SERVICE] Falling back to default super admin emails:', err);
+  }
+  return Array.from(adminSet);
+};
+
 
 export const getFromAddress = () => {
   const envFrom = process.env.SMTP_FROM;
@@ -57,7 +71,7 @@ export const getSmtpPass = (): string => {
   return (process.env.SMTP_PASS || '').replace(/\s+/g, '');
 };
 
-export const EMAILS_ENABLED = false;
+export const EMAILS_ENABLED = true;
 
 export const isSmtpConfigured = (): boolean => {
   if (!EMAILS_ENABLED || process.env.DISABLE_ALL_EMAILS === 'true') {
@@ -658,9 +672,17 @@ export const sendReturnConfirmation = async (
       return { success: true, queued: true };
     }
 
-    const info = await transporter.sendMail(mailOptions);
-    logDelivery('Return email', info);
-    return { success: true, messageId: info.messageId };
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      logDelivery('Return email', info);
+      return { success: true, messageId: info.messageId };
+    } catch (directErr: any) {
+      console.warn('[EMAIL SERVICE] Return email failed with CC, retrying direct to student:', directErr?.message);
+      const fallbackOptions = { ...mailOptions, cc: undefined };
+      const info2 = await transporter.sendMail(fallbackOptions);
+      logDelivery('Return email fallback', info2);
+      return { success: true, messageId: info2.messageId };
+    }
   } catch (error: any) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send return email to ${recipientEmail}: ${formatSmtpError(error)}`);
     return { success: false, error: formatSmtpError(error) };
@@ -942,12 +964,14 @@ export const sendAdminBorrowNotification = async (
   context: AdminBorrowAlertContext
 ) => {
   try {
-    if (!adminEmails || !adminEmails.length) return { success: false, message: 'No admin recipients' };
+    const allAdmins = await getAdminNotificationRecipients();
+    const recipients = Array.from(new Set([...(adminEmails || []), ...allAdmins])).filter(Boolean);
+    if (!recipients.length) return { success: false, message: 'No admin recipients' };
     const formattedDueDate = formatDueDate(context.dueDate);
     const categoryLine = context.category ? ` [${context.category}]` : '';
 
     const contentHtml = `
-      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:18px;margin-bottom:18px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <tr>
             <td style="padding:6px 0;color:#64748b;width:130px;font-family:'SFMono-Regular',Consolas,monospace;">BORROWER:</td>
@@ -960,6 +984,10 @@ export const sendAdminBorrowNotification = async (
           <tr>
             <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ROLL NUMBER:</td>
             <td style="padding:6px 0;color:#e2e8f0;font-family:'SFMono-Regular',Consolas,monospace;">${context.rollNumber || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">COMPONENT:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.quantity}x ${context.itemName}</td>
           </tr>
           <tr>
             <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">PURPOSE:</td>
@@ -980,8 +1008,8 @@ export const sendAdminBorrowNotification = async (
     const mailOptions = {
       from: getFromAddress(),
       replyTo: getReplyToAddress(),
-      to: adminEmails.join(', '),
-      subject: `[CICR Admin Alert] Hardware Issued: ${context.itemName} (${context.quantity}x)`,
+      to: recipients.join(', '),
+      subject: `[CICR Admin Alert] Hardware Issued: ${context.quantity}x ${context.itemName} (${context.borrowerName})`,
       messageId: generateMessageId(),
       headers: buildHeaders('admin-borrow-alert', 'high'),
       priority: 'high' as const,
@@ -1004,12 +1032,16 @@ export const sendAdminBorrowNotification = async (
         badgeType: 'primary',
         title: `${context.quantity}x ${context.itemName}${categoryLine}`,
         subtitle: `Hardware component issued to ${context.borrowerName}.`,
-        contentHtml
+        contentHtml,
+        actionButton: {
+          text: 'Open Admin Vault',
+          url: 'https://cicr-inventory.vercel.app/'
+        }
       })
     };
 
     if (!isSmtpConfigured()) {
-      console.log(`[MOCK EMAIL SERVICE] Admin borrow notification sent to ${adminEmails.join(', ')}`);
+      console.log(`[MOCK EMAIL SERVICE] Admin borrow notification sent to ${recipients.join(', ')}`);
       return { success: true, mocked: true };
     }
 
@@ -1039,14 +1071,20 @@ export const sendAdminReturnNotification = async (
   context: AdminReturnAlertContext
 ) => {
   try {
-    if (!adminEmails || !adminEmails.length) return { success: false, message: 'No admin recipients' };
+    const allAdmins = await getAdminNotificationRecipients();
+    const recipients = Array.from(new Set([...(adminEmails || []), ...allAdmins])).filter(Boolean);
+    if (!recipients.length) return { success: false, message: 'No admin recipients' };
     const retTime = new Date(context.returnedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
 
     const contentHtml = `
-      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:18px;margin-bottom:18px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <tr>
-            <td style="padding:6px 0;color:#64748b;width:120px;font-family:'SFMono-Regular',Consolas,monospace;">RETURNED BY:</td>
+            <td style="padding:6px 0;color:#64748b;width:130px;font-family:'SFMono-Regular',Consolas,monospace;">COMPONENT:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.quantity ? `${context.quantity}x ` : ''}${context.itemName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">RETURNED BY:</td>
             <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.borrowerName}</td>
           </tr>
           <tr>
@@ -1059,7 +1097,7 @@ export const sendAdminReturnNotification = async (
           </tr>
           <tr>
             <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">STATUS:</td>
-            <td style="padding:6px 0;color:#39ff14;font-weight:600;font-family:'SFMono-Regular',Consolas,monospace;">RESTOCKED & VERIFIED</td>
+            <td style="padding:6px 0;color:#39ff14;font-weight:600;font-family:'SFMono-Regular',Consolas,monospace;">RESTOCKED & VERIFIED IN VAULT</td>
           </tr>
         </table>
       </div>
@@ -1068,8 +1106,8 @@ export const sendAdminReturnNotification = async (
     const mailOptions = {
       from: getFromAddress(),
       replyTo: getReplyToAddress(),
-      to: adminEmails.join(', '),
-      subject: `[CICR Admin Alert] Item Restocked: ${context.itemName}`,
+      to: recipients.join(', '),
+      subject: `[CICR Admin Alert] Item Restocked: ${context.quantity ? `${context.quantity}x ` : ''}${context.itemName} (${context.borrowerName})`,
       messageId: generateMessageId(),
       headers: buildHeaders('admin-return-alert', 'normal'),
       priority: 'normal' as const,
@@ -1077,6 +1115,7 @@ export const sendAdminReturnNotification = async (
         `CICR ADMIN // HARDWARE RETURN TELEMETRY`,
         `================================================`,
         `Item: ${context.itemName}`,
+        `Quantity: ${context.quantity || 1}`,
         `Borrower: ${context.borrowerName} (${context.borrowerEmail || 'N/A'})`,
         `Restocked At: ${retTime} IST`,
         `Status: RESTOCKED & VERIFIED`,
@@ -1087,9 +1126,13 @@ export const sendAdminReturnNotification = async (
       html: renderCyberEmail({
         badgeText: 'TELEMETRY // ITEM RESTOCKED',
         badgeType: 'success',
-        title: `Component Restocked: ${context.itemName}`,
-        subtitle: `Hardware returned by ${context.borrowerName}.`,
-        contentHtml
+        title: `Component Restocked: ${context.quantity ? `${context.quantity}x ` : ''}${context.itemName}`,
+        subtitle: `Hardware returned and verified by admin for ${context.borrowerName}.`,
+        contentHtml,
+        actionButton: {
+          text: 'Open Admin Vault',
+          url: 'https://cicr-inventory.vercel.app/'
+        }
       })
     };
 
@@ -1461,13 +1504,17 @@ export const sendAdminHardwareRequestAlert = async (
   context: HardwareRequestEmailContext
 ) => {
   try {
-    const recipients = Array.isArray(adminEmails) ? adminEmails : [adminEmails];
+    const allAdmins = await getAdminNotificationRecipients();
+    const passed = Array.isArray(adminEmails) ? adminEmails : [adminEmails];
+    const recipients = Array.from(new Set([...passed, ...allAdmins])).filter(Boolean);
+    if (!recipients.length) return { success: false, message: 'No admin recipients' };
+
     const requestedDateStr = context.requestedAt
-      ? new Date(context.requestedAt).toLocaleString('en-GB')
-      : new Date().toLocaleString('en-GB');
+      ? new Date(context.requestedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+      : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
 
     const contentHtml = `
-      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:18px;margin-bottom:18px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <tr>
             <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">REQUEST ID:</td>
@@ -1506,12 +1553,12 @@ export const sendAdminHardwareRequestAlert = async (
           </tr>` : ''}
           <tr>
             <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">TIMESTAMP:</td>
-            <td style="padding:6px 0;color:#94a3b8;font-family:'SFMono-Regular',Consolas,monospace;">${requestedDateStr}</td>
+            <td style="padding:6px 0;color:#94a3b8;font-family:'SFMono-Regular',Consolas,monospace;">${requestedDateStr} IST</td>
           </tr>
         </table>
       </div>
       <p style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0;">
-        This request is queued in the Admin Portal. Please log in to approve or decline this component issue.
+        This request is queued in the Admin Dashboard. Please log in to approve or reject this hardware issue request.
       </p>
     `;
 
@@ -1519,7 +1566,7 @@ export const sendAdminHardwareRequestAlert = async (
       from: getFromAddress(),
       replyTo: getReplyToAddress(),
       to: recipients.join(', '),
-      subject: `[CICR Inventory] Hardware Request: ${context.quantity}x ${context.itemName} (${context.borrowerName})`,
+      subject: `[CICR Admin Alert] New Hardware Request: ${context.quantity}x ${context.itemName} (${context.borrowerName})`,
       messageId: generateMessageId(),
       headers: buildHeaders('admin-hardware-request', 'high'),
       priority: 'high' as const,
@@ -1533,7 +1580,7 @@ export const sendAdminHardwareRequestAlert = async (
         context.rollNumber ? `Roll Number: ${context.rollNumber}` : '',
         `Purpose: ${context.purpose}`,
         context.dueDate ? `Est. Due Date: ${context.dueDate}` : '',
-        `Timestamp: ${requestedDateStr}`,
+        `Timestamp: ${requestedDateStr} IST`,
         ``,
         `Please log in to the CICR Admin Portal to review and approve/reject this request.`,
         ``,
@@ -1544,7 +1591,11 @@ export const sendAdminHardwareRequestAlert = async (
         badgeType: 'warning',
         title: `Hardware Issue Request: ${context.itemName}`,
         subtitle: `Action required: ${context.borrowerName} has requested ${context.quantity}x ${context.itemName}.`,
-        contentHtml
+        contentHtml,
+        actionButton: {
+          text: 'Review in Admin Portal',
+          url: 'https://cicr-inventory.vercel.app/'
+        }
       })
     };
 
@@ -1642,11 +1693,300 @@ export const sendHardwareRequestStatusEmail = async (
       return { success: true, mocked: true };
     }
 
-    const info = await transporter.sendMail(mailOptions);
-    logDelivery('hardware-status-update', info);
-    return { success: true, messageId: info.messageId };
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      logDelivery('hardware-status-update', info);
+      return { success: true, messageId: info.messageId };
+    } catch (directErr: any) {
+      console.warn('[EMAIL SERVICE] Direct send failed with CC, retrying direct to borrower:', directErr?.message);
+      const fallbackOptions = { ...mailOptions, cc: undefined };
+      const info2 = await transporter.sendMail(fallbackOptions);
+      logDelivery('hardware-status-update-fallback', info2);
+      return { success: true, messageId: info2.messageId };
+    }
   } catch (error: any) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send hardware status email:`, formatSmtpError(error));
+    return { success: false, error: error.message };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 14.1 STUDENT HARDWARE ISSUE REQUEST SUBMISSION RECEIPT
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const sendStudentHardwareRequestSubmittedEmail = async (
+  recipientEmail: string,
+  borrowerName: string,
+  context: {
+    itemName: string;
+    quantity: number;
+    purpose: string;
+    durationDays: number;
+    dueDate?: string;
+    requestedAt?: string;
+  }
+) => {
+  try {
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">COMPONENT:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.quantity}x ${context.itemName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">PURPOSE:</td>
+            <td style="padding:6px 0;color:#e2e8f0;line-height:1.4;">${context.purpose}</td>
+          </tr>
+          ${context.dueDate ? `
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">EST. DUE DATE:</td>
+            <td style="padding:6px 0;color:#facc15;font-family:'SFMono-Regular',Consolas,monospace;">${context.dueDate}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">STATUS:</td>
+            <td style="padding:6px 0;color:#f59e0b;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">PENDING ADMIN APPROVAL</td>
+          </tr>
+        </table>
+      </div>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0;">
+        Your component issue request has been submitted successfully and sent to CICR lab administrators for verification. You will receive an email once your request is reviewed.
+      </p>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipientEmail,
+      subject: `[CICR Inventory] Request Received: ${context.quantity}x ${context.itemName}`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('student-request-submitted'),
+      priority: 'normal' as const,
+      text: [
+        `CICR INVENTORY // HARDWARE REQUEST SUBMITTED`,
+        `================================================`,
+        `Hello ${borrowerName},`,
+        ``,
+        `Your request for ${context.quantity}x ${context.itemName} has been received and queued for admin review.`,
+        `Purpose: ${context.purpose}`,
+        context.dueDate ? `Est. Due Date: ${context.dueDate}` : '',
+        `Status: PENDING ADMIN APPROVAL`,
+        ``,
+        `You will receive an update once an administrator reviews your request.`,
+        ``,
+        `Regards,`,
+        `CICR Inventory Team`
+      ].filter(Boolean).join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'QUEUE // REQUEST SUBMITTED',
+        badgeType: 'warning',
+        title: `Hardware Issue Request Queued: ${context.itemName}`,
+        subtitle: `Hello ${borrowerName}, your request for ${context.quantity}x ${context.itemName} is under review.`,
+        contentHtml
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Student request submission receipt sent to ${recipientEmail}`);
+      return { success: true, mocked: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('student-request-submitted', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send student request submission receipt:`, formatSmtpError(error));
+    return { success: false, error: error.message };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 14.2 STUDENT RETURN REQUEST SUBMITTED EMAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const sendStudentReturnRequestSubmittedEmail = async (
+  recipientEmail: string,
+  borrowerName: string,
+  context: {
+    itemName: string;
+    quantity: number;
+    requestedAt?: string;
+  }
+) => {
+  try {
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">RETURNING:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.quantity}x ${context.itemName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">STATUS:</td>
+            <td style="padding:6px 0;color:#f59e0b;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">PENDING ADMIN APPROVAL</td>
+          </tr>
+        </table>
+      </div>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0;">
+        Your component return request has been submitted. Please return the hardware in person to the CICR lab. An administrator will inspect the item and approve the return in the portal.
+      </p>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipientEmail,
+      subject: `[CICR Inventory] Return Request Submitted: ${context.quantity}x ${context.itemName}`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('student-return-submitted'),
+      priority: 'normal' as const,
+      text: [
+        `CICR INVENTORY // RETURN REQUEST SUBMITTED`,
+        `================================================`,
+        `Hello ${borrowerName},`,
+        ``,
+        `Your return request for ${context.quantity}x ${context.itemName} has been submitted for admin approval.`,
+        `Please present the hardware in person at the CICR lab for inspection.`,
+        ``,
+        `Status: PENDING ADMIN APPROVAL`,
+        ``,
+        `Regards,`,
+        `CICR Inventory Team`
+      ].join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'RETURN // PENDING VERIFICATION',
+        badgeType: 'warning',
+        title: `Return Request Submitted: ${context.itemName}`,
+        subtitle: `Hello ${borrowerName}, please present ${context.quantity}x ${context.itemName} at the lab for check-in.`,
+        contentHtml
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Student return request submitted email sent to ${recipientEmail}`);
+      return { success: true, mocked: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('student-return-submitted', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send student return request submitted email:`, formatSmtpError(error));
+    return { success: false, error: error.message };
+  }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 14.3 ADMIN RETURN REQUEST ALERT EMAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const sendAdminReturnRequestAlert = async (
+  adminEmails: string | string[],
+  context: {
+    requestId: string;
+    borrowerName: string;
+    borrowerEmail?: string;
+    rollNumber?: string | null;
+    itemName: string;
+    quantity: number;
+    requestedAt?: string;
+  }
+) => {
+  try {
+    const allAdmins = await getAdminNotificationRecipients();
+    const passed = Array.isArray(adminEmails) ? adminEmails : [adminEmails];
+    const recipients = Array.from(new Set([...passed, ...allAdmins])).filter(Boolean);
+    if (!recipients.length) return { success: false, message: 'No admin recipients' };
+
+    const requestedDateStr = context.requestedAt
+      ? new Date(context.requestedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+      : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+
+    const contentHtml = `
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:18px;margin-bottom:18px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;">REQUEST ID:</td>
+            <td style="padding:6px 0;color:#00f0ff;font-family:'SFMono-Regular',Consolas,monospace;font-weight:600;">#${context.requestId.slice(0, 8)}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">TYPE:</td>
+            <td style="padding:6px 0;color:#f59e0b;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">ITEM RETURN VERIFICATION</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">RETURNING:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.quantity}x ${context.itemName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">MEMBER:</td>
+            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.borrowerName}</td>
+          </tr>
+          ${context.borrowerEmail ? `
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">EMAIL:</td>
+            <td style="padding:6px 0;color:#00f0ff;font-family:'SFMono-Regular',Consolas,monospace;">${context.borrowerEmail}</td>
+          </tr>` : ''}
+          ${context.rollNumber ? `
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ROLL NUMBER:</td>
+            <td style="padding:6px 0;color:#e2e8f0;font-family:'SFMono-Regular',Consolas,monospace;">${context.rollNumber}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">TIMESTAMP:</td>
+            <td style="padding:6px 0;color:#94a3b8;font-family:'SFMono-Regular',Consolas,monospace;">${requestedDateStr} IST</td>
+          </tr>
+        </table>
+      </div>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0;">
+        A member has submitted a return request. Please inspect the hardware component and approve the return in the Admin Dashboard to restock inventory.
+      </p>
+    `;
+
+    const mailOptions = {
+      from: getFromAddress(),
+      replyTo: getReplyToAddress(),
+      to: recipients.join(', '),
+      subject: `[CICR Admin Alert] Return Verification Needed: ${context.quantity}x ${context.itemName} (${context.borrowerName})`,
+      messageId: generateMessageId(),
+      headers: buildHeaders('admin-return-approval-alert', 'high'),
+      priority: 'high' as const,
+      text: [
+        `CICR INVENTORY // RETURN APPROVAL REQUIRED`,
+        `================================================`,
+        `A member has requested to return hardware.`,
+        ``,
+        `Item: ${context.quantity}x ${context.itemName}`,
+        `Member: ${context.borrowerName} (${context.borrowerEmail || 'N/A'})`,
+        context.rollNumber ? `Roll: ${context.rollNumber}` : '',
+        `Timestamp: ${requestedDateStr} IST`,
+        ``,
+        `Please inspect the item and log in to the CICR Admin Portal to verify the return.`,
+        ``,
+        `CICR Inventory System Core`
+      ].filter(Boolean).join('\n'),
+      html: renderCyberEmail({
+        badgeText: 'VAULT // RETURN VERIFICATION',
+        badgeType: 'warning',
+        title: `Return Verification Required: ${context.itemName}`,
+        subtitle: `Action required: ${context.borrowerName} has submitted a return request for ${context.quantity}x ${context.itemName}.`,
+        contentHtml,
+        actionButton: {
+          text: 'Verify Return in Portal',
+          url: 'https://cicr-inventory.vercel.app/'
+        }
+      })
+    };
+
+    if (!isSmtpConfigured()) {
+      console.log(`[MOCK EMAIL SERVICE] Admin return alert dispatched to ${recipients.join(', ')}`);
+      return { success: true, mocked: true };
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logDelivery('admin-return-alert', info);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send admin return request alert:`, formatSmtpError(error));
     return { success: false, error: error.message };
   }
 };
@@ -1662,100 +2002,103 @@ export interface LoginSecurityAlertContext {
   ip?: string;
   userAgent?: string;
   loginTime?: Date | string;
-  sessionCode?: string;
-  validityMinutes?: number;
 }
 
 export const sendLoginSecurityAlertEmail = async (
   context: LoginSecurityAlertContext
 ) => {
   try {
-    const loginTimeStr = new Date(context.loginTime || new Date()).toLocaleString('en-IN', {
+    const loginDate = new Date(context.loginTime || new Date());
+    const dateStr = loginDate.toLocaleDateString('en-IN', {
       timeZone: 'Asia/Kolkata',
-      dateStyle: 'medium',
-      timeStyle: 'short'
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
-
-    const sessionCode = context.sessionCode || Math.floor(100000 + Math.random() * 900000).toString();
-    const validityMins = context.validityMinutes || 5;
+    const timeStr = loginDate.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }) + ' IST';
 
     const contentHtml = `
-      <div style="background:#090c13;border:1px solid #1e293b;border-radius:4px;padding:18px;margin-bottom:18px;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <div style="background:#090c13;border:1px solid #1e293b;border-radius:6px;padding:20px;margin-bottom:20px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;color:#e2e8f0;">
           <tr>
-            <td style="padding:6px 0;color:#64748b;width:150px;font-family:'SFMono-Regular',Consolas,monospace;">USER:</td>
-            <td style="padding:6px 0;color:#ffffff;font-weight:600;">${context.userName}</td>
+            <td style="padding:8px 0;color:#64748b;width:140px;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">NAME:</td>
+            <td style="padding:8px 0;color:#ffffff;font-weight:600;">${context.userName}</td>
           </tr>
           <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ACCOUNT EMAIL:</td>
-            <td style="padding:6px 0;color:#00f0ff;font-family:'SFMono-Regular',Consolas,monospace;">${context.userEmail}</td>
+            <td style="padding:8px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">EMAIL:</td>
+            <td style="padding:8px 0;color:#00f0ff;font-family:'SFMono-Regular',Consolas,monospace;font-weight:600;">${context.userEmail}</td>
           </tr>
           <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">ROLE:</td>
-            <td style="padding:6px 0;color:#ff007a;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">${context.role}</td>
+            <td style="padding:8px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">ROLE:</td>
+            <td style="padding:8px 0;color:#ff007a;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">${context.role}</td>
           </tr>
           <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">AUTH CODE:</td>
-            <td style="padding:6px 0;color:#39ff14;font-size:16px;font-weight:700;letter-spacing:2px;font-family:'SFMono-Regular',Consolas,monospace;">${sessionCode}</td>
+            <td style="padding:8px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">DATE:</td>
+            <td style="padding:8px 0;color:#facc15;font-weight:600;font-family:'SFMono-Regular',Consolas,monospace;">${dateStr}</td>
           </tr>
           <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">VALIDITY WINDOW:</td>
-            <td style="padding:6px 0;color:#facc15;font-weight:700;font-family:'SFMono-Regular',Consolas,monospace;">VALID FOR ${validityMins} MINUTES ONLY</td>
-          </tr>
-          <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">TIMESTAMP:</td>
-            <td style="padding:6px 0;color:#e2e8f0;font-family:'SFMono-Regular',Consolas,monospace;">${loginTimeStr} IST</td>
+            <td style="padding:8px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">TIMESTAMP:</td>
+            <td style="padding:8px 0;color:#38bdf8;font-family:'SFMono-Regular',Consolas,monospace;">${timeStr}</td>
           </tr>
           ${context.ip ? `
           <tr>
-            <td style="padding:6px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;">IP ADDRESS:</td>
-            <td style="padding:6px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${context.ip}</td>
+            <td style="padding:8px 0;color:#64748b;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">IP ADDRESS:</td>
+            <td style="padding:8px 0;color:#cbd5e1;font-family:'SFMono-Regular',Consolas,monospace;">${context.ip}</td>
           </tr>` : ''}
         </table>
       </div>
-      <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);border-radius:4px;padding:12px;margin-bottom:12px;">
-        <p style="margin:0;font-size:12px;color:#facc15;line-height:1.5;">
-          ⚠️ <strong>TIME-SENSITIVE NOTICE:</strong> This autogenerated sign-in verification and session notification is <strong>valid for 5 minutes only</strong>. No administrators receive this alert; this message is dispatched strictly to you as the account holder.
-        </p>
-      </div>
-      <p style="font-size:12px;color:#64748b;line-height:1.5;margin:0;">
-        If you did not initiate this sign-in, please reset your password immediately and notify the CICR lab.
+      <p style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin:0 0 14px 0;">
+        An autogenerated security notification has detected a new sign-in to your CICR Inventory account.
+      </p>
+      <p style="font-size:11.5px;color:#64748b;line-height:1.5;margin:0;">
+        If you initiated this sign-in, you may safely ignore this message. If you did not perform this login, please update your account password immediately.
       </p>
     `;
 
-    // Strictly dispatch ONLY to the user logging in. No admin receives this email!
+    // Strictly dispatch ONLY to the user logging in. No OTP, no session auth code.
     const recipients = [context.userEmail];
 
     const mailOptions = {
       from: getFromAddress(),
       replyTo: getReplyToAddress(),
       to: recipients.join(', '),
-      subject: `[CICR Security Alert] Autogenerated Sign-In Notice (Valid for ${validityMins} Mins)`,
+      subject: `[CICR Security Alert] New Login Detected: ${context.userName}`,
       messageId: generateMessageId(),
-      headers: buildHeaders('login-security-alert', 'high'),
-      priority: 'high' as const,
+      headers: buildHeaders('login-security-alert', 'normal'),
+      priority: 'normal' as const,
       text: [
-        `CICR SECURITY // AUTOGENERATED AUTHENTICATION NOTICE`,
+        `CICR SECURITY // NEW LOGIN DETECTED`,
         `================================================`,
-        `User: ${context.userName} (${context.userEmail})`,
+        `User: ${context.userName}`,
+        `Email: ${context.userEmail}`,
         `Role: ${context.role}`,
-        `Auth Code: ${sessionCode}`,
-        `Validity: VALID FOR ${validityMins} MINUTES ONLY`,
-        `Time: ${loginTimeStr} IST`,
-        `IP: ${context.ip || 'Unknown'}`,
+        `Date: ${dateStr}`,
+        `Time: ${timeStr}`,
+        context.ip ? `IP: ${context.ip}` : '',
         ``,
-        `This time-sensitive sign-in alert is valid for 5 minutes only.`,
-        `Dispatched strictly to account holder. No other administrators received this message.`,
+        `An autogenerated notification that a new login has been found for your account.`,
+        `If you did not perform this sign-in, please change your password immediately.`,
         ``,
         `Regards,`,
         `CICR Security Monitor`
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
       html: renderCyberEmail({
-        badgeText: `SECURITY // VALID FOR ${validityMins} MINS ONLY`,
-        badgeType: 'warning',
-        title: `Sign-In Notice: ${context.userName}`,
-        subtitle: `Autogenerated authentication alert for ${context.userEmail} (valid for 5 mins).`,
-        contentHtml
+        badgeText: `SECURITY // ACCESS AUTHORIZED`,
+        badgeType: 'success',
+        title: `New Login Detected: ${context.userName}`,
+        subtitle: `An autogenerated notification for your CICR account.`,
+        contentHtml,
+        actionButton: {
+          text: 'Open CICR Vault',
+          url: 'https://cicr-inventory.vercel.app/'
+        }
       })
     };
 

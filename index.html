@@ -119,7 +119,7 @@
                     </div>
                 </div>
                 <div class="auth-forgot-row">
-                    <a href="#" id="btn-open-forgot-password" class="auth-forgot-link">
+                    <a href="#" id="btn-open-forgot-password" class="auth-forgot-link" onclick="if (window.openPasswordResetModal) window.openPasswordResetModal(); else document.getElementById('reset-password-modal')?.classList.add('active'); return false;">
                         <i data-lucide="key-round"></i> Forgot / Reset Password?
                     </a>
                 </div>
@@ -407,8 +407,8 @@
                     <span class="profile-name" id="profile-username-display">SRVKILLER09</span>
                     <span class="profile-role">ADMIN</span>
                 </div>
-                <button class="profile-key-btn" id="sidebar-reset-pass-btn" title="Reset / Change Password"
-                    onclick="window.openPasswordResetModal && window.openPasswordResetModal()"
+                <button type="button" class="profile-key-btn" id="sidebar-reset-pass-btn" title="Reset / Change Password"
+                    onclick="document.getElementById('reset-password-modal')?.classList.add('active'); if (window.openPasswordResetModal) window.openPasswordResetModal();"
                     style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; padding:6px; display:flex; align-items:center; border-radius:6px; transition:all 0.2s;">
                     <i data-lucide="key-round" style="width:14px; height:14px;"></i>
                 </button>
@@ -1332,6 +1332,7 @@
                         <h2>Notifications & Telemetry</h2>
                         <p id="notif-drawer-subtitle">Operational alerts, loan schedules & system updates</p>
                     </div>
+                </div>
                 <div class="notif-header-actions-row">
                     <div class="notif-role-badge" id="notif-drawer-role-badge">
                         <span class="role-dot" id="notif-role-dot"></span>
@@ -1417,48 +1418,119 @@
 
     <!-- Password Reset Modal (Direct Self-Service Reset Synced with Database - No OTP) -->
     <div class="modal-overlay" id="reset-password-modal">
-        <div class="modal-content glass small-modal">
-            <button class="close-modal"><i data-lucide="x"></i></button>
-            <div class="modal-header">
-                <h2><i data-lucide="key-round" class="text-cyan"
-                        style="vertical-align:middle; width:20px; height:20px;"></i> Reset Password</h2>
-                <p id="reset-modal-subtitle">Enter your college ID and choose your new password</p>
+        <div class="modal-content glass small-modal reset-password-card">
+            <button type="button" class="close-modal" onclick="if (window.closePasswordResetModal) window.closePasswordResetModal(); else document.getElementById('reset-password-modal')?.classList.remove('active');"><i data-lucide="x"></i></button>
+            
+            <div class="modal-header reset-header-cyber">
+                <div class="reset-cyber-badge">
+                    <i data-lucide="shield-check" class="text-cyan"></i>
+                    <span>CREDENTIAL SECURITY</span>
+                </div>
+                <h2><i data-lucide="key-round" class="text-cyan"></i> Change Password</h2>
+                <p id="reset-modal-subtitle">Authenticate with your current credentials to set a new password</p>
             </div>
 
-            <form id="reset-direct-form">
+            <form id="reset-direct-form" class="reset-cyber-form">
                 <div class="form-group">
-                    <label for="reset-identifier">College Email or Enrollment Number</label>
+                    <div class="label-row-cyber">
+                        <label for="reset-identifier">College Email or Enrollment Number</label>
+                        <span class="cyber-badge-tag">ACCOUNT ID</span>
+                    </div>
                     <div class="input-icon-wrapper">
                         <i data-lucide="mail" class="input-icon"></i>
                         <input type="text" id="reset-identifier" required
-                            placeholder="e.g. 992501030xxx or @mail.jiit.ac.in">
+                            placeholder="e.g. 992501030xxx or @mail.jiit.ac.in" autocomplete="username">
                     </div>
                 </div>
+
                 <div class="form-group">
-                    <label for="reset-new-password">New Password</label>
+                    <div class="label-row-cyber">
+                        <label for="reset-current-password">Current Password</label>
+                        <span class="cyber-badge-req">VERIFY IDENTITY</span>
+                    </div>
+                    <div class="input-icon-wrapper">
+                        <i data-lucide="shield-alert" class="input-icon text-cyan"></i>
+                        <input type="password" id="reset-current-password" required
+                            placeholder="Enter your existing account password" autocomplete="current-password">
+                        <button type="button" class="password-toggle-btn" id="reset-current-pass-toggle"
+                            title="Toggle visibility">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="label-row-cyber">
+                        <label for="reset-new-password">New Password</label>
+                        <span class="cyber-badge-tag">MIN. 6 CHARACTERS</span>
+                    </div>
                     <div class="input-icon-wrapper">
                         <i data-lucide="lock" class="input-icon"></i>
-                        <input type="password" id="reset-new-password" required placeholder="Min. 6 characters">
+                        <input type="password" id="reset-new-password" required
+                            placeholder="Create a strong new password" autocomplete="new-password">
                         <button type="button" class="password-toggle-btn" id="reset-new-pass-toggle"
                             title="Toggle visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
                 </div>
+
                 <div class="form-group">
-                    <label for="reset-confirm-password">Confirm New Password</label>
+                    <div class="label-row-cyber">
+                        <label for="reset-confirm-password">Confirm New Password</label>
+                        <span class="cyber-badge-tag" id="reset-match-tag">RE-TYPE</span>
+                    </div>
                     <div class="input-icon-wrapper">
-                        <i data-lucide="lock" class="input-icon"></i>
-                        <input type="password" id="reset-confirm-password" required placeholder="Re-type new password">
+                        <i data-lucide="check-check" class="input-icon"></i>
+                        <input type="password" id="reset-confirm-password" required
+                            placeholder="Re-enter your new password to verify" autocomplete="new-password">
                         <button type="button" class="password-toggle-btn" id="reset-confirm-pass-toggle"
                             title="Toggle visibility">
                             <i data-lucide="eye"></i>
                         </button>
                     </div>
                 </div>
+
                 <div class="auth-error-msg" id="reset-error" style="display: none;"></div>
-                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-reset-direct">
-                    <i data-lucide="check-circle-2"></i> Update Password & Sync DB
+                
+                <button type="submit" class="btn btn-primary btn-block btn-cyber-pulse" id="btn-submit-reset-direct">
+                    <i data-lucide="shield-check"></i> Authenticate & Update Password
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Return Quantity Selection Modal (Supports Partial & Full Returns with Admin Verification) -->
+    <div class="modal-overlay" id="return-qty-modal">
+        <div class="modal-content glass small-modal">
+            <button type="button" class="close-modal" onclick="document.getElementById('return-qty-modal')?.classList.remove('active');"><i data-lucide="x"></i></button>
+            <div class="modal-header">
+                <h2><i data-lucide="corner-up-left" class="text-cyan"
+                        style="vertical-align:middle; width:20px; height:20px;"></i> Return Component</h2>
+                <p id="return-modal-subtitle">Choose the units you wish to return to the lab</p>
+            </div>
+
+            <form id="return-qty-form">
+                <input type="hidden" id="return-borrow-id" value="">
+                <input type="hidden" id="return-borrow-idx" value="">
+                <div class="form-group">
+                    <label>Component Name</label>
+                    <div id="return-modal-item-name" style="font-weight:700; color:var(--text-main); font-size:14px; padding:4px 0;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="return-qty-input">Quantity to Return</label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="number" id="return-qty-input" min="1" max="1" value="1" required
+                            style="width:100px; font-weight:700; font-size:16px; text-align:center;">
+                        <span id="return-qty-max-label" style="font-size:12px; color:var(--text-dim);">of 1 borrowed</span>
+                    </div>
+                </div>
+                <div class="return-modal-note" style="background:rgba(0, 240, 255, 0.05); border:1px solid rgba(0, 240, 255, 0.18); border-radius:8px; padding:10px 12px; margin-bottom:18px; font-size:11.5px; color:var(--text-muted); display:flex; align-items:flex-start; gap:8px;">
+                    <i data-lucide="shield-alert" style="width:14px; height:14px; color:var(--neon-cyan); flex-shrink:0; margin-top:2px;"></i>
+                    <span id="return-modal-note-text">Members submit return requests for Admin verification. Stock is checked back into inventory once approved by an administrator.</span>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="btn-confirm-return-submit">
+                    <i data-lucide="check-circle-2"></i> Submit Return Request
                 </button>
             </form>
         </div>

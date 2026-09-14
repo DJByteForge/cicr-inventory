@@ -45,6 +45,15 @@ const ADMIN_USERNAME = 'SRVKILLER09';
 
 type UserRole = 'ADMIN' | 'MEMBER';
 
+// Top-level global binding for self-service password reset modal
+(window as any).openPasswordResetModal = () => {
+    const modal = document.getElementById('reset-password-modal');
+    if (modal) modal.classList.add('active');
+    if (typeof PasswordResetManager !== 'undefined') {
+        PasswordResetManager.open();
+    }
+};
+
 // Global state variables
 let inventory: InventoryItem[] = [];
 let logs: ActivityLog[] = [];
@@ -437,11 +446,12 @@ class DatabaseManager {
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            // 1. Fetch items, borrow records, and audit concurrently in parallel
-            const [itemsOutcome, borrowOutcome, auditOutcome] = await Promise.allSettled([
+            // 1. Fetch items, borrow records, audit, and own request status concurrently in parallel
+            const [itemsOutcome, borrowOutcome, auditOutcome, requestsOutcome] = await Promise.allSettled([
                 fetch(`${API_BASE}/items`, { headers }),
                 token ? fetch(`${API_BASE}/borrow/history`, { headers }) : Promise.reject('No token'),
-                token ? fetch(`${API_BASE}/audit`, { headers }) : Promise.reject('No token')
+                token ? fetch(`${API_BASE}/audit`, { headers }) : Promise.reject('No token'),
+                token ? fetch(`${API_BASE}/borrow/requests`, { headers }) : Promise.reject('No token')
             ]);
 
             let dbItems: any[] = [];
@@ -526,6 +536,39 @@ class DatabaseManager {
                 }
             }
 
+            // Sync the member's OWN request statuses so approvals/rejections show
+            // up as in-app notification cards (in addition to the email notice).
+            const currentRole = ModalManager.getCurrentRole();
+            if (currentRole !== 'ADMIN' && requestsOutcome.status === 'fulfilled' && requestsOutcome.value.ok) {
+                try {
+                    const rJson = await requestsOutcome.value.json();
+                    const serverRequests = Array.isArray(rJson.data) ? rJson.data : [];
+                    if (serverRequests.length > 0) {
+                        requests = serverRequests.map((r: any) => ({
+                            id: r.id,
+                            type: r.type || 'ISSUE',
+                            borrowId: r.borrowId,
+                            returnQuantity: r.returnQuantity,
+                            itemId: r.itemId,
+                            itemName: r.itemName,
+                            name: r.borrowerName,
+                            roll: r.rollNumber,
+                            qty: r.type === 'RETURN' ? (r.returnQuantity || r.quantity || 1) : (r.quantity || 1),
+                            purpose: r.purpose,
+                            dueDate: r.dueDate,
+                            status: r.status,
+                            requestedAt: r.requestedAt,
+                            reviewedAt: r.reviewedAt,
+                            reviewedBy: r.reviewedBy,
+                            reviewNote: r.reviewNote
+                        }));
+                        localStorage.setItem('cicr_requests', JSON.stringify(requests));
+                    }
+                } catch (re) {
+                    console.warn('Live request status parse failed:', re);
+                }
+            }
+
             if (window.dashboard && dbItems.length > 0) {
                 window.dashboard.renderStats();
                 window.dashboard.renderInventory();
@@ -557,14 +600,7 @@ class DatabaseManager {
         const userEmail = (storedUser.email || '').toLowerCase().trim();
         const userRoll = (storedUser.roll_number || storedUser.roll || '').toLowerCase().trim();
 
-        const isUserLoan = (rec: BorrowRecord) => {
-            const rName = (rec.name || '').toLowerCase().trim();
-            const rRoll = (rec.roll || '').toLowerCase().trim();
-            if (userRoll && rRoll && rRoll === userRoll) return true;
-            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
-            if (authName && rName && (rName === authName || authName.includes(rName))) return true;
-            return false;
-        };
+        const isUserLoan = (rec: BorrowRecord) => ModalManager.isUserLoanMatch(rec);
 
         const isUserRequest = (req: any) => {
             const rName = (req.name || req.borrowerName || '').toLowerCase().trim();
@@ -1298,6 +1334,9 @@ class DashboardManager {
         let lowStockCount = 0;
         let outOfStockCount = 0;
 
+        const role = ModalManager.getCurrentRole();
+        const isAdmin = role === 'ADMIN';
+
         inventory.forEach(item => {
             totalQty += item.quantity;
 
@@ -1306,8 +1345,13 @@ class DashboardManager {
                 ? item.availableQuantity
                 : Math.max(0, item.quantity - borrowedSum);
 
-            const activeLoans = borrowedSum > 0 ? borrowedSum : Math.max(0, item.quantity - currentAvailable);
-            checkedOutQty += activeLoans;
+            if (isAdmin) {
+                const activeLoans = borrowedSum > 0 ? borrowedSum : Math.max(0, item.quantity - currentAvailable);
+                checkedOutQty += activeLoans;
+            } else {
+                const memberLoans = (item.borrowedBy || []).filter(r => !r.returned && ModalManager.isUserLoanMatch(r));
+                checkedOutQty += memberLoans.reduce((sum, rec) => sum + rec.qty, 0);
+            }
 
             if (currentAvailable <= 0) {
                 outOfStockCount++;
@@ -1323,6 +1367,9 @@ class DashboardManager {
     }
 
     public renderInventory(force = false) {
+        const role = ModalManager.getCurrentRole();
+        const isAdmin = role === 'ADMIN';
+
         const filtered = inventory.filter(item => {
             const matchesCategory = this.activeCategory === 'all' || item.category === this.activeCategory;
             const matchesSearch = item.name.toLowerCase().includes(this.searchQuery) ||
@@ -1337,7 +1384,11 @@ class DashboardManager {
 
             let matchesStock = true;
             if (this.activeStockFilter === 'borrowed') {
-                matchesStock = borrowedSum > 0 || available < item.quantity;
+                if (isAdmin) {
+                    matchesStock = borrowedSum > 0 || available < item.quantity;
+                } else {
+                    matchesStock = (item.borrowedBy || []).some(r => !r.returned && ModalManager.isUserLoanMatch(r));
+                }
             } else if (this.activeStockFilter === 'low') {
                 matchesStock = available > 0 && available <= 2;
             } else if (this.activeStockFilter === 'out') {
@@ -1347,7 +1398,6 @@ class DashboardManager {
             return matchesCategory && matchesSearch && matchesStock;
         });
 
-        const role = ModalManager.getCurrentRole();
         const currentFingerprint = `${role}_${this.activeCategory}_${this.activeStockFilter}_${this.searchQuery}_` + 
             filtered.map(i => `${i.id}_${i.availableQuantity}_${i.quantity}_${i.name}_${i.location}_${(i.borrowedBy || []).length}`).join('|');
 
@@ -1414,18 +1464,29 @@ class DashboardManager {
             ? item.availableQuantity
             : Math.max(0, item.quantity - borrowedSum);
 
+        const totalQty = Number(item.quantity) || 0;
         let statusText = 'Available';
         let statusClass = 'status-available';
 
-        if (available === 0) {
-            statusText = 'Out of Stock';
+        if (totalQty === 1) {
+            if (available > 0) {
+                statusText = 'Available';
+                statusClass = 'status-available';
+            } else {
+                statusText = 'Not Available';
+                statusClass = 'status-out';
+            }
+        } else if (totalQty > 1) {
+            if (available === 0) {
+                statusText = 'Not Available';
+                statusClass = 'status-out';
+            } else {
+                statusText = 'Ask in Person';
+                statusClass = 'status-ask-person';
+            }
+        } else {
+            statusText = 'Not Available';
             statusClass = 'status-out';
-        } else if (available <= 2) {
-            statusText = 'Low Stock';
-            statusClass = 'status-low';
-        } else if (borrowedSum > 0 || available < item.quantity) {
-            statusText = 'Borrowed';
-            statusClass = 'status-borrowed';
         }
 
         const catMap: Record<string, string> = {
@@ -1607,6 +1668,48 @@ class ModalManager {
         document.querySelector('.btn-close-about')!.addEventListener('click', () => {
             this.close('about-modal');
         });
+
+        const returnQtyForm = document.getElementById('return-qty-form') as HTMLFormElement | null;
+        if (returnQtyForm && !returnQtyForm.dataset.bound) {
+            returnQtyForm.dataset.bound = 'true';
+            returnQtyForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const borrowId = (document.getElementById('return-borrow-id') as HTMLInputElement)?.value;
+                const idx = Number((document.getElementById('return-borrow-idx') as HTMLInputElement)?.value) || 0;
+                const qtyVal = Number((document.getElementById('return-qty-input') as HTMLInputElement)?.value) || 1;
+                await ModalManager.handleReturnSubmission(borrowId, qtyVal, idx);
+            });
+        }
+    }
+
+    public static isUserLoanMatch(rec: BorrowRecord): boolean {
+        const storedUser = JSON.parse(localStorage.getItem('cicr_user') || '{}');
+        const authName = (localStorage.getItem('cicr_auth') || '').toLowerCase().trim();
+        const userName = (storedUser.name || '').toLowerCase().trim();
+        const userEmail = (storedUser.email || '').toLowerCase().trim();
+        const userRoll = (storedUser.roll_number || storedUser.roll || '').toLowerCase().trim();
+        const userId = storedUser.id || '';
+        const recUserId = (rec as any).userId || (rec as any).user_id || '';
+
+        // 1. Direct User ID match (most authoritative)
+        if (userId && recUserId && userId === recUserId) return true;
+
+        // 2. Exact Roll Number match
+        const rRoll = (rec.roll || '').toLowerCase().trim();
+        if (userRoll && rRoll && userRoll === rRoll) return true;
+        if (userEmail && rRoll && (userEmail.startsWith(`${rRoll}@`) || userEmail === `${rRoll}@mail.jiit.ac.in`)) return true;
+
+        // 3. Exact Email match if rec has email
+        const recEmail = ((rec as any).email || (rec as any).borrowerEmail || '').toLowerCase().trim();
+        if (userEmail && recEmail && userEmail === recEmail) return true;
+
+        // 4. Exact Name match (guarding against generic placeholders like "member", "student", "user", "admin")
+        const rName = (rec.name || '').toLowerCase().trim();
+        const isGenericName = (n: string) => !n || ['member', 'student', 'user', 'admin', 'borrower', 'guest'].includes(n) || n.length < 3;
+        if (!isGenericName(userName) && !isGenericName(rName) && userName === rName) return true;
+        if (!isGenericName(authName) && !isGenericName(rName) && authName === rName) return true;
+
+        return false;
     }
 
     static open(modalId: string) {
@@ -1913,25 +2016,56 @@ class ModalManager {
         const returnBtn = document.getElementById('btn-return') as HTMLButtonElement;
         const role = this.getCurrentRole();
 
-        if (available === 0) {
-            badge.innerText = 'Out of Stock';
+        const totalQty = Number(item.quantity) || 0;
+        if (totalQty === 1) {
+            if (available > 0) {
+                badge.innerText = 'Available';
+                badge.classList.add('status-available');
+                borrowBtn.disabled = false;
+                borrowBtn.style.opacity = '1';
+            } else {
+                badge.innerText = 'Not Available';
+                badge.classList.add('status-out');
+                borrowBtn.disabled = true;
+                borrowBtn.style.opacity = '0.5';
+            }
+        } else if (totalQty > 1) {
+            if (available === 0) {
+                badge.innerText = 'Not Available';
+                badge.classList.add('status-out');
+                borrowBtn.disabled = true;
+                borrowBtn.style.opacity = '0.5';
+            } else {
+                badge.innerText = 'Ask in Person';
+                badge.classList.add('status-ask-person');
+                borrowBtn.disabled = false;
+                borrowBtn.style.opacity = '1';
+            }
+        } else {
+            badge.innerText = 'Not Available';
             badge.classList.add('status-out');
             borrowBtn.disabled = true;
             borrowBtn.style.opacity = '0.5';
-        } else if (available <= 2) {
-            badge.innerText = 'Low Stock';
-            badge.classList.add('status-low');
-            borrowBtn.disabled = false;
-            borrowBtn.style.opacity = '1';
-        } else {
-            badge.innerText = 'Available';
-            badge.classList.add('status-available');
-            borrowBtn.disabled = false;
-            borrowBtn.style.opacity = '1';
         }
 
-        if (role === 'ADMIN' && item.borrowedBy.length > 0) {
+        const myLoan = (item.borrowedBy || []).find(rec => !rec.returned && ModalManager.isUserLoanMatch(rec));
+        const hasActiveLoan = (item.borrowedBy || []).some(rec => !rec.returned);
+
+        if (role === 'ADMIN' && hasActiveLoan) {
             returnBtn.style.display = 'inline-flex';
+            returnBtn.innerHTML = '<i data-lucide="corner-up-left"></i> Return Item';
+            returnBtn.onclick = () => {
+                const firstLoan = (item.borrowedBy || []).find(rec => !rec.returned);
+                if (firstLoan) {
+                    this.openReturnModal(firstLoan, item, item.borrowedBy.indexOf(firstLoan));
+                }
+            };
+        } else if (role !== 'ADMIN' && myLoan) {
+            returnBtn.style.display = 'inline-flex';
+            returnBtn.innerHTML = '<i data-lucide="corner-up-left"></i> Return Item';
+            returnBtn.onclick = () => {
+                this.openReturnModal(myLoan, item, item.borrowedBy.indexOf(myLoan));
+            };
         } else {
             returnBtn.style.display = 'none';
         }
@@ -1955,11 +2089,17 @@ class ModalManager {
         const listContainer = document.getElementById('borrowers-list')!;
         listContainer.innerHTML = '';
 
-        if (item.borrowedBy.length > 0) {
+        const isMember = role !== 'ADMIN';
+        const visibleBorrowers = isMember
+            ? (item.borrowedBy || []).filter(rec => !rec.returned && ModalManager.isUserLoanMatch(rec))
+            : (item.borrowedBy || []).filter(rec => !rec.returned);
+
+        if (visibleBorrowers.length > 0) {
             borrowersPanel.style.display = 'block';
             const todayStr = new Date().toISOString().split('T')[0];
 
-            item.borrowedBy.forEach((rec, idx) => {
+            visibleBorrowers.forEach((rec) => {
+                const origIdx = item.borrowedBy.indexOf(rec);
                 let due = rec.dueDate;
                 if (!due && rec.date) {
                     const bTime = new Date(rec.date).getTime();
@@ -1974,13 +2114,13 @@ class ModalManager {
                 recEl.className = 'borrower-record';
                 recEl.innerHTML = `
                     <div class="borrower-info-main">
-                        <span class="borrower-name">${rec.name}</span>
+                        <span class="borrower-name">${rec.name} ${isMember ? '(Your Active Loan)' : ''}</span>
                         <span class="borrower-roll">${rec.roll} &bull; ${rec.purpose}</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${dueBadge}
                         <span class="borrower-qty-badge">${rec.qty} units</span>
-                        <button class="btn btn-secondary btn-inline-return" style="padding: 6px 10px; font-size: 11px;" data-index="${idx}">
+                        <button class="btn btn-secondary btn-inline-return" style="padding: 6px 10px; font-size: 11px;">
                             <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
                         </button>
                     </div>
@@ -1988,7 +2128,7 @@ class ModalManager {
                 
                 recEl.querySelector('.btn-inline-return')!.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.handleReturnClick(idx);
+                    this.openReturnModal(rec, item, origIdx);
                 });
                 
                 listContainer.appendChild(recEl);
@@ -2104,14 +2244,7 @@ class ModalManager {
         const userEmail = (storedUser.email || '').toLowerCase().trim();
         const userRoll = (storedUser.roll_number || storedUser.roll || '').toLowerCase().trim();
 
-        const isUserLoan = (rec: BorrowRecord) => {
-            const rName = (rec.name || '').toLowerCase().trim();
-            const rRoll = (rec.roll || '').toLowerCase().trim();
-            if (userRoll && rRoll && rRoll === userRoll) return true;
-            if (userName && rName && (rName === userName || rName.includes(userName) || userName.includes(rName))) return true;
-            if (authName && rName && (rName === authName || authName.includes(rName))) return true;
-            return false;
-        };
+        const isUserLoan = (rec: BorrowRecord) => ModalManager.isUserLoanMatch(rec);
 
         const isUserRequest = (req: any) => {
             const rName = (req.name || req.borrowerName || '').toLowerCase().trim();
@@ -2330,8 +2463,19 @@ class ModalManager {
                                 <strong>${rec.qty}x ${item.name}</strong> was borrowed by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'Student'}).
                             </p>
                             <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Lab Project'} &bull; Due date was ${due}. Immediate return required.</p>
+                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                <button class="btn btn-secondary btn-drawer-return" style="padding: 4px 10px; font-size: 11px; display:inline-flex; align-items:center; gap:5px;">
+                                    <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
+                                </button>
+                            </div>
                         </div>
                     `;
+                    el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        ModalManager.close('logs-drawer');
+                        const origIdx = (item.borrowedBy || []).indexOf(rec);
+                        ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
+                    });
                     container.appendChild(el);
                 });
             }
@@ -2366,8 +2510,19 @@ class ModalManager {
                                 <strong>${rec.qty}x ${item.name}</strong> &bull; Held by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'ID'})
                             </p>
                             <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Robotics Work'}</p>
+                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                <button class="btn btn-secondary btn-drawer-return" style="padding: 4px 10px; font-size: 11px; display:inline-flex; align-items:center; gap:5px;">
+                                    <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
+                                </button>
+                            </div>
                         </div>
                     `;
+                    el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        ModalManager.close('logs-drawer');
+                        const origIdx = (item.borrowedBy || []).indexOf(rec);
+                        ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
+                    });
                     container.appendChild(el);
                 });
             }
@@ -2836,49 +2991,137 @@ class ModalManager {
         }
     }
 
-    private static async handleReturnClick(idx: number) {
-        if (!selectedItem) return;
+    // Opens the return quantity selector. Members choose how many of their borrowed
+    // units to return (partial returns allowed); the request then awaits admin approval.
+    public static openReturnModal(rec: BorrowRecord, item: InventoryItem, origIdx: number) {
+        if (!rec || !rec.id) {
+            ToastManager.show('Return Unavailable', 'This loan is not linked to a server record yet.', 'warning');
+            return;
+        }
 
-        const rec = selectedItem.borrowedBy[idx];
-        if (!rec) return;
+        const isAdmin = this.getCurrentRole() === 'ADMIN';
+        const borrowedQty = Math.max(1, Number(rec.qty) || 1);
 
+        const nameEl = document.getElementById('return-modal-item-name');
+        if (nameEl) nameEl.innerText = item.name;
+
+        (document.getElementById('return-borrow-id') as HTMLInputElement).value = rec.id;
+        (document.getElementById('return-borrow-idx') as HTMLInputElement).value = String(origIdx);
+
+        const qtyInput = document.getElementById('return-qty-input') as HTMLInputElement;
+        qtyInput.min = '1';
+        qtyInput.max = String(borrowedQty);
+        qtyInput.value = String(borrowedQty);
+
+        const maxLabel = document.getElementById('return-qty-max-label');
+        if (maxLabel) maxLabel.innerText = `of ${borrowedQty} borrowed`;
+
+        const subtitle = document.getElementById('return-modal-subtitle');
+        if (subtitle) subtitle.innerText = isAdmin
+            ? 'Enter the number of units being returned to the lab'
+            : 'Choose how many borrowed units you wish to return';
+
+        const noteText = document.getElementById('return-modal-note-text');
+        if (noteText) noteText.innerText = isAdmin
+            ? 'Administrator direct return: inventory is restored immediately on confirmation.'
+            : 'Members submit return requests for Admin verification. Stock is checked back into inventory once approved by an administrator.';
+
+        const submitBtn = document.getElementById('btn-confirm-return-submit');
+        if (submitBtn) submitBtn.innerHTML = isAdmin
+            ? '<i data-lucide="check-circle-2"></i> Confirm Return'
+            : '<i data-lucide="check-circle-2"></i> Submit Return Request';
+
+        this.open('return-qty-modal');
+        lucide.createIcons();
+    }
+
+    // Submits a full or partial return. Members hit /borrow/return-request (admin
+    // approval required); admins hit /borrow/return (immediate restock).
+    public static async handleReturnSubmission(borrowId: string, qtyVal: number, _idx: number) {
+        if (!borrowId) {
+            ToastManager.show('Return Error', 'Borrow reference is missing.', 'error');
+            return;
+        }
+
+        const isAdmin = this.getCurrentRole() === 'ADMIN';
         const token = localStorage.getItem('cicr_token');
-        try {
-            if (rec.id) {
-                const res = await fetch(`${API_BASE}/borrow/return`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        borrowId: rec.id
-                    })
-                });
+        const submitBtn = document.getElementById('btn-confirm-return-submit') as HTMLButtonElement | null;
+        const itemName = (document.getElementById('return-modal-item-name')?.innerText || 'Component').trim();
+        const requestedQty = Math.max(1, Number(qtyVal) || 1);
 
-                if (res.ok) {
-                    ToastManager.show('Component Returned', `Successfully returned ${rec.qty}x ${selectedItem.name} to vault`, 'success');
-                    DatabaseManager.addLog('return', `<span>${rec.name}</span> returned ${rec.qty}x <span>${selectedItem.name}</span>.`);
-                    await DatabaseManager.syncFromBackend();
-                    const refreshed = inventory.find(i => i.id === selectedItem?.id);
-                    if (refreshed) this.openDetailModal(refreshed);
-                    return;
-                } else {
-                    const errJson = await res.json();
-                    ToastManager.show('Return Error', errJson.message || 'Failed to process return.', 'error');
-                }
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const endpoint = isAdmin ? `${API_BASE}/borrow/return` : `${API_BASE}/borrow/return-request`;
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ borrowId, returnQuantity: requestedQty })
+            });
+
+            const payload = await res.json().catch(() => ({})) as any;
+            const ok = res.ok || res.status === 202;
+
+            if (!ok) {
+                ToastManager.show('Return Error', payload.message || 'Failed to submit the return.', 'error');
+                if (submitBtn) submitBtn.disabled = false;
+                return;
+            }
+
+            this.close('return-qty-modal');
+
+            if (isAdmin) {
+                ToastManager.show('Component Returned', payload.message || `Successfully returned ${requestedQty} unit(s) of ${itemName}.`, 'success');
+                DatabaseManager.addLog('return', `Admin returned <span>${requestedQty}x ${itemName}</span> to the vault.`);
+            } else {
+                ToastManager.show(
+                    'Return Request Submitted',
+                    `Return of ${requestedQty}x ${itemName} is awaiting Administrator approval before stock is restored.`,
+                    'success'
+                );
+                DatabaseManager.addLog('return', `<span>${itemName}</span> return request submitted for ${requestedQty} unit(s) — pending admin approval.`);
+
+                // Reflect the pending return immediately in the member's drawer.
+                const localUser = (() => {
+                    try { return JSON.parse(localStorage.getItem('cicr_user') || '{}'); } catch { return {}; }
+                })();
+                const localReq: RequestRecord = {
+                    id: payload?.data?.id || `req-ret-local-${Date.now()}`,
+                    type: 'RETURN',
+                    borrowId,
+                    returnQuantity: requestedQty,
+                    itemId: selectedItem?.id || '',
+                    itemName,
+                    name: localUser.name || localStorage.getItem('cicr_auth') || 'Member',
+                    roll: localUser.roll_number || localUser.roll || '',
+                    qty: requestedQty,
+                    purpose: `Return ${requestedQty} unit(s)`,
+                    status: 'PENDING',
+                    requestedAt: new Date().toISOString()
+                };
+                requests.unshift(localReq);
+                DatabaseManager.save();
+            }
+
+            await DatabaseManager.syncFromBackend();
+
+            if (selectedItem) {
+                const refreshed = inventory.find(i => i.id === selectedItem?.id);
+                if (refreshed) this.openDetailModal(refreshed);
+            }
+            DatabaseManager.updateNotificationBadges();
+
+            if (isAdmin) {
+                AdminManager.loadHardwareRequests(true);
             }
         } catch (e) {
             console.error('Return API error:', e);
             ToastManager.show('Network Error', 'Failed to reach server.', 'error');
+            if (submitBtn) submitBtn.disabled = false;
         }
-
-        selectedItem.borrowedBy.splice(idx, 1);
-        DatabaseManager.addLog('return', `<span>${rec.name}</span> returned ${rec.qty}x <span>${selectedItem.name}</span>.`);
-        DatabaseManager.save();
-        this.openDetailModal(selectedItem);
-        ToastManager.show('Item Returned', `Restored ${rec.qty}x ${selectedItem.name}`, 'info');
-        window.dashboard!.init();
     }
 }
 
@@ -3455,6 +3698,7 @@ class PasswordResetManager {
     private static resetModal: HTMLElement | null = null;
     private static directForm: HTMLFormElement | null = null;
     private static identifierInput: HTMLInputElement | null = null;
+    private static currentPassInput: HTMLInputElement | null = null;
     private static newPassInput: HTMLInputElement | null = null;
     private static confirmPassInput: HTMLInputElement | null = null;
     private static errorEl: HTMLElement | null = null;
@@ -3463,11 +3707,28 @@ class PasswordResetManager {
         this.resetModal = document.getElementById('reset-password-modal');
         this.directForm = document.getElementById('reset-direct-form') as HTMLFormElement | null;
         this.identifierInput = document.getElementById('reset-identifier') as HTMLInputElement | null;
+        this.currentPassInput = document.getElementById('reset-current-password') as HTMLInputElement | null;
         this.newPassInput = document.getElementById('reset-new-password') as HTMLInputElement | null;
         this.confirmPassInput = document.getElementById('reset-confirm-password') as HTMLInputElement | null;
         this.errorEl = document.getElementById('reset-error');
 
         // Password visibility toggles
+        const currentPassToggle = document.getElementById('reset-current-pass-toggle');
+        if (currentPassToggle && this.currentPassInput && !currentPassToggle.dataset.bound) {
+            currentPassToggle.dataset.bound = 'true';
+            currentPassToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.currentPassInput) return;
+                const isPass = this.currentPassInput.type === 'password';
+                this.currentPassInput.type = isPass ? 'text' : 'password';
+                const icon = currentPassToggle.querySelector('i, svg');
+                if (icon) {
+                    icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
+                    lucide.createIcons();
+                }
+            });
+        }
+
         const newPassToggle = document.getElementById('reset-new-pass-toggle');
         if (newPassToggle && this.newPassInput && !newPassToggle.dataset.bound) {
             newPassToggle.dataset.bound = 'true';
@@ -3508,7 +3769,17 @@ class PasswordResetManager {
             });
         }
 
+        const submitResetBtn = document.getElementById('btn-submit-reset-direct');
+        if (submitResetBtn && !submitResetBtn.dataset.bound) {
+            submitResetBtn.dataset.bound = 'true';
+            submitResetBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.handleDirectReset();
+            });
+        }
+
         (window as any).openPasswordResetModal = () => this.open();
+        (window as any).closePasswordResetModal = () => this.close();
     }
 
     static open() {
@@ -3540,11 +3811,13 @@ class PasswordResetManager {
             this.identifierInput.value = defaultId;
         }
 
+        this.resetModal.style.display = 'flex';
+        void this.resetModal.offsetWidth;
         this.resetModal.classList.add('active');
         lucide.createIcons();
 
-        if (defaultId && this.newPassInput) {
-            setTimeout(() => this.newPassInput?.focus(), 150);
+        if (defaultId && this.currentPassInput) {
+            setTimeout(() => this.currentPassInput?.focus(), 150);
         } else if (this.identifierInput) {
             setTimeout(() => this.identifierInput?.focus(), 150);
         }
@@ -3556,18 +3829,29 @@ class PasswordResetManager {
         }
         if (this.resetModal) {
             this.resetModal.classList.remove('active');
+            setTimeout(() => {
+                if (this.resetModal && !this.resetModal.classList.contains('active')) {
+                    this.resetModal.style.display = 'none';
+                }
+            }, 260);
         }
     }
 
     private static async handleDirectReset() {
-        if (!this.identifierInput || !this.newPassInput || !this.confirmPassInput) return;
+        if (!this.identifierInput || !this.currentPassInput || !this.newPassInput || !this.confirmPassInput) return;
         const identifier = this.identifierInput.value.trim();
+        const currentPassword = this.currentPassInput.value;
         const newPassword = this.newPassInput.value;
         const confirmPassword = this.confirmPassInput.value;
         if (this.errorEl) this.errorEl.style.display = 'none';
 
         if (!identifier) {
-            this.showError('Please enter your college email, enrollment number, or username.');
+            this.showError('Please enter your college email or enrollment number.');
+            return;
+        }
+
+        if (!currentPassword) {
+            this.showError('Please enter your current password to verify your identity.');
             return;
         }
 
@@ -3577,14 +3861,19 @@ class PasswordResetManager {
         }
 
         if (newPassword !== confirmPassword) {
-            this.showError('Passwords do not match. Please re-enter.');
+            this.showError('New passwords do not match. Please verify and re-type.');
+            return;
+        }
+
+        if (newPassword === currentPassword) {
+            this.showError('New password cannot be the same as your current password.');
             return;
         }
 
         const submitBtn = document.getElementById('btn-submit-reset-direct') as HTMLButtonElement | null;
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Updating Database...`;
+            submitBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Verifying Credentials...`;
             lucide.createIcons();
         }
 
@@ -3594,6 +3883,7 @@ class PasswordResetManager {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     identifier,
+                    current_password: currentPassword,
                     new_password: newPassword
                 })
             });
@@ -3601,14 +3891,14 @@ class PasswordResetManager {
             const data = await res.json();
 
             if (!res.ok) {
-                this.showError(data.message || 'Password reset failed. Please check your account identifier.');
+                this.showError(data.message || 'Password update failed. Please check your credentials.');
                 return;
             }
 
             // Successfully updated password in database!
             ToastManager.show(
                 'Password Updated & Synced',
-                'Your password has been successfully updated in the CICR database.',
+                'Your account credentials have been securely verified and updated in the database.',
                 'success'
             );
 
@@ -3633,7 +3923,7 @@ class PasswordResetManager {
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = `<i data-lucide="check-circle-2"></i> Update Password & Sync DB`;
+                submitBtn.innerHTML = `<i data-lucide="shield-check"></i> Authenticate & Update Password`;
                 lucide.createIcons();
             }
         }
@@ -3671,6 +3961,9 @@ interface AdminUserRecord {
 
 interface AdminHardwareRequest {
     id: string;
+    type?: 'ISSUE' | 'RETURN';
+    borrowId?: string;
+    returnQuantity?: number;
     itemId: string;
     itemName: string;
     category?: string;
@@ -4031,6 +4324,9 @@ class AdminManager {
             .filter((r) => r.status === 'PENDING' && !handledIds.has(r.id))
             .map((r) => ({
                 id: r.id,
+                type: (r as any).type || 'ISSUE',
+                borrowId: (r as any).borrowId,
+                returnQuantity: (r as any).returnQuantity,
                 itemId: r.itemId,
                 itemName: r.itemName,
                 borrowerName: r.name,
@@ -4134,14 +4430,17 @@ class AdminManager {
             return;
         }
 
-        container.innerHTML = pendingRequests.map(r => `
+        container.innerHTML = pendingRequests.map(r => {
+            const isReturn = r.type === 'RETURN';
+            const returnQty = Number(r.returnQuantity || r.quantity) || 1;
+            return `
             <div class="hardware-request-card glass" data-request-id="${r.id}">
                 <div class="hw-card-header">
                     <div class="hw-card-chip">
-                        <i data-lucide="cpu" style="width:14px; height:14px; color:var(--neon-cyan);"></i>
+                        <i data-lucide="${isReturn ? 'corner-up-left' : 'cpu'}" style="width:14px; height:14px; color:var(--neon-cyan);"></i>
                         <span class="hw-item-name">${r.itemName}</span>
                     </div>
-                    <span class="hw-qty-badge">${r.quantity}x UNIT${r.quantity > 1 ? 'S' : ''}</span>
+                    <span class="hw-qty-badge">${isReturn ? 'RETURN' : 'ISSUE'} · ${isReturn ? returnQty : r.quantity}x</span>
                 </div>
 
                 <div class="hw-card-requester">
@@ -4154,21 +4453,24 @@ class AdminManager {
 
                 <div class="hw-card-details">
                     ${r.rollNumber ? `<div class="hw-detail-row"><span class="hw-lbl">ROLL:</span> <span class="hw-val mono">${r.rollNumber}</span></div>` : ''}
-                    <div class="hw-detail-row"><span class="hw-lbl">PURPOSE:</span> <span class="hw-val">${r.purpose}</span></div>
-                    <div class="hw-detail-row"><span class="hw-lbl">DUE DATE:</span> <span class="hw-val due">${r.dueDate || '7 Days'}</span></div>
+                    ${isReturn
+                        ? `<div class="hw-detail-row"><span class="hw-lbl">RETURNING:</span> <span class="hw-val">${returnQty}x ${r.itemName}</span></div>`
+                        : `<div class="hw-detail-row"><span class="hw-lbl">PURPOSE:</span> <span class="hw-val">${r.purpose}</span></div>`}
+                    ${isReturn ? '' : `<div class="hw-detail-row"><span class="hw-lbl">DUE DATE:</span> <span class="hw-val due">${r.dueDate || '7 Days'}</span></div>`}
                     <div class="hw-detail-row"><span class="hw-lbl">REQUESTED:</span> <span class="hw-val date">${new Date(r.requestedAt).toLocaleString()}</span></div>
                 </div>
 
                 <div class="hw-card-actions">
                     <button class="btn-hw-approve" onclick="window.adminApproveHardware('${r.id}')">
-                        <i data-lucide="check"></i> Approve Issue
+                        <i data-lucide="check"></i> ${isReturn ? 'Approve Return' : 'Approve Issue'}
                     </button>
                     <button class="btn-hw-reject" onclick="window.adminRejectHardware('${r.id}')">
                         <i data-lucide="x"></i> Reject
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         lucide.createIcons();
     }
@@ -4199,8 +4501,13 @@ class AdminManager {
         DatabaseManager.save();
         DatabaseManager.updateNotificationBadges();
 
-        ToastManager.show('Request Authorized', `Component issue for "${reqSnapshot?.itemName || 'Hardware'}" approved.`, 'success');
-        DatabaseManager.addLog('approve', `Admin authorized hardware issue request #${id.slice(0, 8)}`);
+        const isReturnReq = reqSnapshot?.type === 'RETURN';
+        ToastManager.show(
+            isReturnReq ? 'Return Authorized' : 'Request Authorized',
+            `${isReturnReq ? 'Return' : 'Component issue'} for "${reqSnapshot?.itemName || 'Hardware'}" approved.`,
+            'success'
+        );
+        DatabaseManager.addLog('approve', `Admin authorized ${isReturnReq ? 'return' : 'hardware issue'} request #${id.slice(0, 8)}`);
 
         // 2. Perform background sync to server
         try {
@@ -4243,17 +4550,23 @@ class AdminManager {
 
         // 1. INSTANT 1-CLICK OPTIMISTIC UI UPDATE (Zero Latency)
         this.hardwareRequests = this.hardwareRequests.filter(r => r.id !== id);
-        requests = requests.filter(r => r.id !== id);
+        const reqObj = requests.find(r => r.id === id);
+        if (reqObj) {
+            reqObj.status = 'REJECTED';
+            reqObj.reviewNote = 'Declined by Administrator.';
+        } else {
+            requests = requests.filter(r => r.id !== id);
+        }
         this.updateStats();
         this.renderHardwareQueue();
 
-        // Immediately purge from localStorage
+        // Persist updated status to localStorage
         const localStoredRaw = localStorage.getItem('cicr_requests');
         if (localStoredRaw) {
             try {
                 const parsed = JSON.parse(localStoredRaw);
-                const filtered = parsed.filter((r: any) => r.id !== id);
-                localStorage.setItem('cicr_requests', JSON.stringify(filtered));
+                const updated = parsed.map((r: any) => r.id === id ? { ...r, status: 'REJECTED', reviewNote: 'Declined by Administrator.' } : r);
+                localStorage.setItem('cicr_requests', JSON.stringify(updated));
             } catch {}
         }
         DatabaseManager.save();
@@ -4262,7 +4575,19 @@ class AdminManager {
         ToastManager.show('Request Declined', `Hardware issue request for "${itemName}" declined.`, 'info');
         DatabaseManager.addLog('reject', `Admin declined hardware issue request #${id.slice(0, 8)}`);
 
-        // 2. Perform background notification to server
+        // 2. Perform background notification to server with full borrower details guaranteed
+        const reqPayload = targetReq ? {
+            ...targetReq,
+            reason: 'Declined by Administrator.',
+            borrowerEmail: targetReq.borrowerEmail,
+            borrowerName: targetReq.borrowerName,
+            itemName: targetReq.itemName,
+            quantity: targetReq.quantity,
+            purpose: targetReq.purpose,
+            type: targetReq.type,
+            borrowId: targetReq.borrowId
+        } : { reason: 'Declined by Administrator.' };
+
         try {
             await fetch(`${API_BASE}/borrow/requests/${id}/reject`, {
                 method: 'POST',
@@ -4270,7 +4595,7 @@ class AdminManager {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ reason: 'Declined by Administrator.' })
+                body: JSON.stringify(reqPayload)
             });
         } catch (e) {
             console.warn('Background rejection sync note:', e);

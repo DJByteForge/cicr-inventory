@@ -9,7 +9,8 @@ import {
   createHardwareRequestHandler,
   getHardwareRequestsHandler,
   approveHardwareRequestHandler,
-  rejectHardwareRequestHandler
+  rejectHardwareRequestHandler,
+  submitReturnRequestHandler
 } from './borrow.controller';
 import { authenticateToken } from '../../middleware/auth.middleware';
 
@@ -24,6 +25,7 @@ router.post('/requests/:id/reject', authenticateToken, rejectHardwareRequestHand
 router.post('/request-otp', authenticateToken, requestOtp);
 router.post('/verify-otp', authenticateToken, verifyOtp);
 router.post('/return', authenticateToken, returnItem);
+router.post('/return-request', authenticateToken, submitReturnRequestHandler);
 router.get('/history', authenticateToken, getBorrowHistory);
 
 export default router;

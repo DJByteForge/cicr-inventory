@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import { supabase } from '../../app';
-import { dbRead } from '../../config/database';
+import { supabase, dbWrite, dbRead } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import {
   sendBorrowConfirmation,
@@ -245,13 +244,72 @@ export const verifyOtp = async (req: AuthRequest, res: Response) => {
 };
 
 // POST /api/borrow/return (Return Item)
+// POST /api/borrow/return-request (Member submits a return request for admin approval)
+export const submitReturnRequestHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    const borrowId = req.body.borrow_id || req.body.borrowId || req.body.id;
+    const returnQuantity = Number(req.body.returnQuantity || req.body.return_quantity || req.body.quantity) || 1;
+
+    if (!borrowId) {
+      return res.status(400).json({ status: 'error', message: 'borrowId is required.' });
+    }
+
+    const { createReturnRequest } = await import('./hardwareRequestService');
+    const result = await createReturnRequest({
+      borrowId,
+      returnQuantity,
+      userId: req.user?.id,
+      userName: req.user?.name,
+      userEmail: req.user?.email,
+      userRoll: req.user?.roll_number || undefined
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ status: 'error', message: result.message || 'Failed to submit return request.' });
+    }
+
+    return res.status(201).json({
+      status: 'success',
+      message: 'Return request submitted successfully. Awaiting Administrator verification.',
+      data: result.request
+    });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+// POST /api/borrow/return (Return Item - Admin direct return or automatic routing)
 export const returnItem = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     const borrow_id = req.body.borrow_id || req.body.borrowId || req.body.id;
 
     if (!borrow_id) {
       return res.status(400).json({ status: 'error', message: 'borrow_id is required.' });
+    }
+
+    // If the request comes from a regular MEMBER, route to return approval workflow!
+    if (userRole !== 'ADMIN') {
+      const { createReturnRequest } = await import('./hardwareRequestService');
+      const result = await createReturnRequest({
+        borrowId: borrow_id,
+        returnQuantity: Number(req.body.returnQuantity || req.body.return_quantity || req.body.quantity) || 1,
+        userId,
+        userName: req.user?.name,
+        userEmail: req.user?.email,
+        userRoll: req.user?.roll_number || undefined
+      });
+
+      if (!result.success) {
+        return res.status(400).json({ status: 'error', message: result.message || 'Failed to submit return request.' });
+      }
+
+      return res.status(202).json({
+        status: 'success',
+        message: 'Return request submitted for Admin approval. An administrator will inspect and confirm the return.',
+        data: result.request
+      });
     }
 
     // 1. Fetch borrow record (read pool)
@@ -270,35 +328,53 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
     }
 
     const returnTimestamp = new Date();
+    const qtyToReturn = Math.max(1, Math.min(Number(req.body.returnQuantity || req.body.return_quantity) || record.quantity, record.quantity));
+    const isFullReturn = qtyToReturn >= record.quantity;
 
-    // 2. Atomic status flip: only transition BORROWED -> RETURNED.
-    //    If another concurrent request already flipped it, this affects 0 rows.
-    const { data: updatedRecord, error: updateRecordErr } = await supabase
-      .from('borrow_records')
-      .update({
-        status: 'RETURNED',
-        returned_at: returnTimestamp.toISOString()
-      })
-      .eq('id', borrow_id)
-      .eq('status', 'BORROWED')   // atomic guard: only if still BORROWED
-      .select()
-      .single();
+    let updatedRecord: any = null;
 
-    if (updateRecordErr) throw updateRecordErr;
+    if (isFullReturn) {
+      // Full return: mark status as RETURNED
+      const { data: updated, error: updateRecordErr } = await supabase
+        .from('borrow_records')
+        .update({
+          status: 'RETURNED',
+          returned_at: returnTimestamp.toISOString()
+        })
+        .eq('id', borrow_id)
+        .eq('status', 'BORROWED')
+        .select()
+        .single();
 
-    // If no row was updated, a concurrent request already returned this record.
-    if (!updatedRecord) {
-      return res.status(400).json({ status: 'error', message: 'Item has already been returned.' });
+      if (updateRecordErr) throw updateRecordErr;
+      updatedRecord = updated;
+    } else {
+      // Partial return: decrement active borrowed quantity
+      const { data: updated, error: updateRecordErr } = await supabase
+        .from('borrow_records')
+        .update({
+          quantity: record.quantity - qtyToReturn
+        })
+        .eq('id', borrow_id)
+        .eq('status', 'BORROWED')
+        .select()
+        .single();
+
+      if (updateRecordErr) throw updateRecordErr;
+      updatedRecord = updated;
     }
 
-    // 3. Restore available_quantity — read then write is safe here because
-    //    only one request can win the BORROWED -> RETURNED flip above.
+    if (!updatedRecord) {
+      return res.status(400).json({ status: 'error', message: 'Item has already been returned or modified.' });
+    }
+
+    // 3. Restore available_quantity
     const { data: currentItem } = await dbRead
       .from('inventory')
       .select('available_quantity')
       .eq('id', record.inventory_id)
       .single();
-    const restoredQty = (currentItem?.available_quantity || 0) + record.quantity;
+    const restoredQty = (currentItem?.available_quantity || 0) + qtyToReturn;
 
     const { error: restoreErr } = await supabase
       .from('inventory')
@@ -311,7 +387,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
 
     // 4. Audit Log
     const itemName = record.inventory?.name || record.inventory_id;
-    await logAudit('Returned', userId, record.inventory_id, `Returned ${record.quantity} units of "${itemName}"`);
+    await logAudit('Returned', userId, record.inventory_id, `Returned ${qtyToReturn} units of "${itemName}"`);
 
     // 5. Send Return Confirmation Receipt Email to borrower
     const userEmail = req.user?.email;
@@ -325,7 +401,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
       borrowerName: userName,
       borrowerEmail: userEmail,
       itemName,
-      quantity: record.quantity,
+      quantity: qtyToReturn,
       returnedAt: returnTimestamp
     }));
 
@@ -333,7 +409,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({
       status: 'success',
-      message: 'Item returned successfully! Return logged on server.',
+      message: `Successfully returned ${qtyToReturn} units of "${itemName}".`,
       data: updatedRecord
     });
   } catch (err: any) {
@@ -363,7 +439,17 @@ export const getBorrowHistory = async (req: AuthRequest, res: Response) => {
 
     // Members see only their own history; Admins see all
     if (userRole !== 'ADMIN') {
-      query = query.eq('user_id', userId);
+      const userRoll = req.user?.roll_number;
+      const userName = req.user?.name;
+      if (userId && userRoll) {
+        query = query.or(`user_id.eq.${userId},roll_number.eq.${userRoll}`);
+      } else if (userId) {
+        query = query.eq('user_id', userId);
+      } else if (userRoll) {
+        query = query.eq('roll_number', userRoll);
+      } else if (userName) {
+        query = query.eq('borrower_name', userName);
+      }
     }
 
     const { data: records, error } = await query;
@@ -464,6 +550,25 @@ export const createHardwareRequestHandler = async (req: AuthRequest, res: Respon
 export const getHardwareRequestsHandler = async (req: AuthRequest, res: Response) => {
   try {
     const force = req.query.force === 'true';
+    const userRole = req.user?.role;
+
+    // Admins see the full pending queue. Members see ONLY their own requests,
+    // across every status (PENDING / APPROVED / REJECTED) so they get in-app
+    // feedback when an administrator approves or rejects their request.
+    if (userRole !== 'ADMIN') {
+      const { getUserHardwareRequests } = await import('./hardwareRequestService');
+      const ownRequests = await getUserHardwareRequests({
+        userId: req.user?.id,
+        email: req.user?.email,
+        rollNumber: req.user?.roll_number
+      });
+      return res.status(200).json({
+        status: 'success',
+        count: ownRequests.length,
+        data: ownRequests
+      });
+    }
+
     const { getAllHardwareRequests } = await import('./hardwareRequestService');
     const requests = await getAllHardwareRequests(force);
     return res.status(200).json({
@@ -516,7 +621,7 @@ export const rejectHardwareRequestHandler = async (req: AuthRequest, res: Respon
     const adminEmail = req.user?.email || 'cicrinventory@gmail.com';
 
     const { rejectHardwareRequest } = await import('./hardwareRequestService');
-    const result = await rejectHardwareRequest(id, adminName, adminEmail, reason);
+    const result = await rejectHardwareRequest(id, adminName, adminEmail, reason, req.body);
 
     if (!result.success) {
       return res.status(400).json({ status: 'error', message: result.error });

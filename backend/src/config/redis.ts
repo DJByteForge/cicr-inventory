@@ -60,7 +60,11 @@ const memoryKeys = async (pattern: string): Promise<string[]> => {
 
 // ------------------------------------------------------------------ ioredis
 export const redisClient: Redis | null = isRedisEnabled
-  ? new Redis(REDIS_URL, { enableReadyCheck: false, maxRetriesPerRequest: 1 })
+  ? new Redis(REDIS_URL, {
+      enableReadyCheck: false,
+      maxRetriesPerRequest: 1,
+      tls: REDIS_URL.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
+    })
   : null;
 
 if (redisClient) {

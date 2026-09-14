@@ -1713,6 +1713,17 @@ body.theme-light .auth-card input::placeholder,
     box-shadow: 0 0 8px #bd00ff;
 }
 
+.status-ask-person {
+    background: rgba(0, 240, 255, 0.08);
+    color: var(--neon-cyan);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+}
+.status-ask-person .status-indicator-dot {
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan);
+    animation: status-pulse 2s infinite;
+}
+
 @keyframes status-pulse {
     0% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.35); opacity: 0.55; }
@@ -2057,6 +2068,181 @@ body.theme-light .auth-card input::placeholder,
     color: var(--neon-pink) !important;
     text-shadow: 0 0 8px rgba(255, 0, 122, 0.5);
     box-shadow: 0 0 12px rgba(255, 0, 122, 0.15);
+}
+
+.modal-status-badge.status-ask-person {
+    background: rgba(0, 240, 255, 0.1) !important;
+    border: 1px solid rgba(0, 240, 255, 0.3) !important;
+    color: var(--neon-cyan) !important;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+/* Dedicated Aesthetic Password Reset Modal */
+#reset-password-modal {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    background: rgba(3, 5, 12, 0.82) !important;
+    backdrop-filter: blur(18px) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+    z-index: 999999 !important;
+    display: none;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 20px !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#reset-password-modal.active {
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+}
+
+#reset-password-modal .modal-content {
+    position: relative !important;
+    width: 100% !important;
+    max-width: 430px !important;
+    background: rgba(10, 14, 26, 0.95) !important;
+    backdrop-filter: blur(32px) !important;
+    -webkit-backdrop-filter: blur(32px) !important;
+    border: 1px solid rgba(0, 240, 255, 0.35) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(0, 240, 255, 0.15) !important;
+    padding: 30px 26px !important;
+    z-index: 1000000 !important;
+    transform: scale(0.96) translateY(10px);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+}
+
+#reset-password-modal.active .modal-content {
+    transform: scale(1) translateY(0) !important;
+    opacity: 1 !important;
+}
+
+.reset-header-cyber {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.reset-cyber-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    letter-spacing: 1px;
+    color: var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    border-radius: 4px;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+}
+
+.label-row-cyber {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.label-row-cyber label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 0 !important;
+}
+
+.cyber-badge-tag {
+    font-size: 9px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+}
+
+.cyber-badge-req {
+    font-size: 9.5px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+#reset-password-modal .input-icon-wrapper input {
+    background: rgba(6, 9, 18, 0.75) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    font-size: 13.5px !important;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+#reset-password-modal .input-icon-wrapper input:focus {
+    border-color: var(--neon-cyan) !important;
+    background: rgba(8, 13, 26, 0.95) !important;
+    box-shadow: 0 0 16px rgba(0, 240, 255, 0.22) !important;
+}
+
+#reset-password-modal .input-icon-wrapper input::placeholder {
+    color: rgba(148, 163, 184, 0.45) !important;
+    font-size: 12.5px !important;
+}
+
+.btn-cyber-pulse {
+    background: linear-gradient(135deg, #bd00ff 0%, #00f0ff 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: 0 0 20px rgba(189, 0, 255, 0.4) !important;
+    border: none !important;
+    margin-top: 10px !important;
+    padding: 12px 18px !important;
+    transition: transform 0.2s, box-shadow 0.2s !important;
+}
+
+.btn-cyber-pulse:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 0 28px rgba(0, 240, 255, 0.6) !important;
+}
+
+#return-qty-modal .modal-content {
+    background: rgba(10, 14, 26, 0.98) !important;
+    border: 1px solid rgba(0, 240, 255, 0.28) !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(0, 240, 255, 0.12) !important;
+}
+
+.admin-req-badge-return {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.admin-req-badge-issue {
+    background: rgba(0, 240, 255, 0.12) !important;
+    color: var(--neon-cyan) !important;
+    border: 1px solid rgba(0, 240, 255, 0.3) !important;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .modal-body {

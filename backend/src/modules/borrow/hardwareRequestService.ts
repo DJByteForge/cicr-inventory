@@ -6,14 +6,21 @@ import {
   sendHardwareRequestStatusEmail,
   sendBorrowConfirmation,
   sendAdminBorrowNotification,
+  sendStudentHardwareRequestSubmittedEmail,
+  sendStudentReturnRequestSubmittedEmail,
+  sendAdminReturnRequestAlert,
+  sendReturnConfirmation,
+  sendAdminReturnNotification,
   SUPER_ADMIN_EMAILS
 } from '../../services/emailService';
-import { dbRead } from '../../config/database';
-import { supabase } from '../../app';
+import { dbRead, dbWrite, supabase } from '../../config/database';
 import { finalizeBorrow } from './borrow.controller';
 
 export interface HardwareIssueRequest {
   id: string;
+  type?: 'ISSUE' | 'RETURN';
+  borrowId?: string;
+  returnQuantity?: number;
   itemId: string;
   itemName: string;
   category?: string;
@@ -127,7 +134,7 @@ export const createHardwareRequest = async (payload: {
     const safeItemId = isUUID(payload.itemId) ? payload.itemId : null;
 
     if (safeItemId) {
-      await supabase.from('borrow_records').insert([
+      const { data: insertedRec } = await supabase.from('borrow_records').insert([
         {
           id: isUUID(id) ? id : undefined,
           user_id: safeUserId,
@@ -140,7 +147,12 @@ export const createHardwareRequest = async (payload: {
           due_date: dueDate,
           status: 'PENDING'
         }
-      ]);
+      ]).select().single();
+
+      if (insertedRec && insertedRec.id && insertedRec.id !== id) {
+        requestsState[insertedRec.id] = { ...newRequest, id: insertedRec.id };
+        saveState();
+      }
     }
   } catch (err) {
     console.warn('[HARDWARE REQUEST] Note mirroring to Supabase borrow_records:', err);
@@ -161,7 +173,114 @@ export const createHardwareRequest = async (payload: {
     requestedAt
   }).catch((err) => console.error('[HARDWARE REQUEST] Admin email alert failed:', err));
 
+  // Instant notification to Student Borrower
+  if (payload.borrowerEmail) {
+    sendStudentHardwareRequestSubmittedEmail(payload.borrowerEmail, payload.borrowerName, {
+      itemName,
+      quantity: payload.quantity,
+      purpose: payload.purpose,
+      durationDays,
+      dueDate,
+      requestedAt
+    }).catch((err) => console.error('[HARDWARE REQUEST] Student submission email failed:', err));
+  }
+
   return newRequest;
+};
+
+export const createReturnRequest = async (payload: {
+  borrowId: string;
+  returnQuantity: number;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  userRoll?: string;
+}): Promise<{ success: boolean; request?: HardwareIssueRequest; message?: string }> => {
+  const { borrowId, returnQuantity } = payload;
+  if (!borrowId) {
+    return { success: false, message: 'borrowId is required.' };
+  }
+
+  // 1. Fetch borrow record from database
+  const { data: record, error } = await dbRead
+    .from('borrow_records')
+    .select('*, inventory(name, category)')
+    .eq('id', borrowId)
+    .maybeSingle();
+
+  if (error || !record) {
+    return { success: false, message: 'Active borrow record not found in system.' };
+  }
+
+  if (record.status === 'RETURNED') {
+    return { success: false, message: 'This item has already been marked as returned.' };
+  }
+
+  const numToReturn = Math.max(1, Math.min(Number(returnQuantity) || 1, record.quantity));
+  const itemName = record.inventory?.name || 'Hardware Component';
+  const category = record.inventory?.category || 'Robotics';
+  const borrowerName = payload.userName || record.borrower_name || 'Member';
+  const borrowerEmail = payload.userEmail || (record.roll_number ? `${record.roll_number}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in');
+  const rollNumber = payload.userRoll || record.roll_number || null;
+  const requestedAt = new Date().toISOString();
+  const id = `req-ret-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+
+  const newReturnReq: HardwareIssueRequest = {
+    id,
+    type: 'RETURN',
+    borrowId: record.id,
+    returnQuantity: numToReturn,
+    itemId: record.inventory_id,
+    itemName,
+    category,
+    borrowerName,
+    borrowerEmail,
+    rollNumber,
+    userId: payload.userId || record.user_id,
+    quantity: numToReturn,
+    purpose: `Return ${numToReturn} of ${record.quantity} units`,
+    durationDays: 0,
+    dueDate: '',
+    status: 'PENDING',
+    requestedAt
+  };
+
+  requestsState[id] = newReturnReq;
+  requestsState[record.id] = newReturnReq;
+  saveState();
+  invalidateHardwareRequestsCache();
+
+  // Update borrow_records in Supabase so return request is persistent across server nodes
+  try {
+    await supabase
+      .from('borrow_records')
+      .update({ status: 'RETURN_REQUESTED' })
+      .eq('id', record.id);
+  } catch (dbErr) {
+    console.warn('[HARDWARE RETURN] Note setting RETURN_REQUESTED on borrow_records:', dbErr);
+  }
+
+  // 2. Dispatch email confirmation to student
+  if (borrowerEmail) {
+    sendStudentReturnRequestSubmittedEmail(borrowerEmail, borrowerName, {
+      itemName,
+      quantity: numToReturn,
+      requestedAt
+    }).catch((err) => console.error('[HARDWARE RETURN] Student submission email error:', err));
+  }
+
+  // 3. Dispatch alert to Super Admins
+  sendAdminReturnRequestAlert(SUPER_ADMIN_EMAILS, {
+    requestId: id,
+    borrowerName,
+    borrowerEmail,
+    rollNumber,
+    itemName,
+    quantity: numToReturn,
+    requestedAt
+  }).catch((err) => console.error('[HARDWARE RETURN] Admin return alert error:', err));
+
+  return { success: true, request: newReturnReq };
 };
 
 let cachedHardwareRequests: HardwareIssueRequest[] | null = null;
@@ -188,20 +307,24 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
   // Strictly filter to PENDING requests only
   const localList = Object.values(requestsState).filter((r) => r.status === 'PENDING');
 
-  // 1. Query pending rows from Supabase borrow_records
+  // 1. Query pending and return-requested rows from Supabase borrow_records
   try {
     const { data: dbRecords } = await dbRead
       .from('borrow_records')
       .select('*, inventory(name, category)')
-      .eq('status', 'PENDING')
+      .in('status', ['PENDING', 'RETURN_REQUESTED'])
       .order('borrowed_at', { ascending: false });
 
     if (dbRecords && dbRecords.length > 0) {
       for (const rec of dbRecords) {
-        const exists = localList.some(r => r.id === rec.id || (r.itemId === rec.inventory_id && r.purpose === rec.purpose));
+        const isReturn = rec.status === 'RETURN_REQUESTED';
+        const exists = localList.some(r => r.id === rec.id || (r.borrowId === rec.id && r.type === 'RETURN') || (r.itemId === rec.inventory_id && r.purpose === rec.purpose));
         if (!exists) {
           localList.push({
             id: rec.id,
+            type: isReturn ? 'RETURN' : 'ISSUE',
+            borrowId: isReturn ? rec.id : undefined,
+            returnQuantity: isReturn ? (rec.quantity || 1) : undefined,
             itemId: rec.inventory_id,
             itemName: rec.inventory?.name || 'Hardware Component',
             category: rec.inventory?.category || 'Robotics',
@@ -210,7 +333,7 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
             rollNumber: rec.roll_number,
             userId: rec.user_id,
             quantity: rec.quantity || 1,
-            purpose: rec.purpose || 'Testing',
+            purpose: rec.purpose || (isReturn ? `Return ${rec.quantity || 1} units` : 'Testing'),
             durationDays: 7,
             dueDate: rec.due_date ? rec.due_date.split('T')[0] : '',
             status: 'PENDING',
@@ -231,20 +354,22 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
       .from('audit_logs')
       .select('*')
       .in('action', ['Hardware Requested', 'Hardware Approved', 'Hardware Rejected'])
-      .order('created_at', { ascending: false })
+      .order('timestamp', { ascending: false })
       .limit(60);
 
     if (auditEvents && auditEvents.length > 0) {
       for (const ev of auditEvents) {
+        const evTime = ev.timestamp || new Date().toISOString();
         if (ev.action === 'Hardware Requested' && ev.description) {
           const match = ev.description.match(/^(.*?)\s*\((.*?)\)\s*requested\s*(\d+)x\s*"([^"]+)"\s*for\s*purpose:\s*(.*)$/i);
           if (match) {
             const [, borrowerName, borrowerEmail, qtyStr, itemName, purpose] = match;
-            const isResolved = auditEvents.some(other => 
-              (other.action === 'Hardware Approved' || other.action === 'Hardware Rejected') &&
-              new Date(other.created_at).getTime() >= new Date(ev.created_at).getTime() &&
-              (other.description?.includes(borrowerName) || other.item_id === ev.item_id)
-            );
+            const isResolved = auditEvents.some(other => {
+              const otherTime = other.timestamp || '';
+              return (other.action === 'Hardware Approved' || other.action === 'Hardware Rejected') &&
+                new Date(otherTime).getTime() >= new Date(evTime).getTime() &&
+                (other.description?.includes(borrowerName) || other.item_id === ev.item_id);
+            });
 
             if (!isResolved) {
               const alreadyInList = localList.some(r => 
@@ -254,7 +379,7 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
 
               if (!alreadyInList) {
                 localList.push({
-                  id: `req_audit_${new Date(ev.created_at).getTime()}`,
+                  id: `req_audit_${new Date(evTime).getTime()}`,
                   itemId: ev.item_id || 'unlisted-item',
                   itemName: itemName || 'Hardware Component',
                   category: 'Tools',
@@ -265,9 +390,9 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
                   quantity: parseInt(qtyStr, 10) || 1,
                   purpose: purpose || 'Testing',
                   durationDays: 7,
-                  dueDate: new Date(new Date(ev.created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  dueDate: new Date(new Date(evTime).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                   status: 'PENDING',
-                  requestedAt: ev.created_at || new Date().toISOString()
+                  requestedAt: evTime
                 });
               }
             }
@@ -286,6 +411,87 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
   cachedHardwareRequests = sorted;
   lastHardwareRequestsFetchTime = Date.now();
   return sorted;
+};
+
+// Returns a single member's own requests across ALL statuses (PENDING,
+// APPROVED, REJECTED) so the member's client can show approval/rejection
+// feedback in the notifications drawer in addition to the transactional email.
+export const getUserHardwareRequests = async (identity: {
+  userId?: string;
+  email?: string;
+  rollNumber?: string | null;
+}): Promise<HardwareIssueRequest[]> => {
+  // Always reload the freshest persisted state so status changes made by an
+  // admin on another node are reflected for the member.
+  try {
+    if (fs.existsSync(STORAGE_FILE)) {
+      const raw = fs.readFileSync(STORAGE_FILE, 'utf-8');
+      requestsState = JSON.parse(raw);
+    }
+  } catch (err) {
+    console.warn('[HARDWARE REQUESTS] Failed to reload request storage file:', err);
+  }
+
+  const norm = (v?: string | null) => (v || '').toLowerCase().trim();
+  const targetEmail = norm(identity.email);
+  const targetRoll = norm(identity.rollNumber);
+  const targetUser = identity.userId;
+
+  const own = Object.values(requestsState).filter((r) => {
+    if (targetUser && r.userId && r.userId === targetUser) return true;
+    if (targetEmail && norm(r.borrowerEmail) === targetEmail) return true;
+    if (targetRoll && norm(r.rollNumber) === targetRoll) return true;
+    return false;
+  });
+
+  // Also query pending & return-requested rows from Supabase borrow_records for this user
+  try {
+    let query = dbRead
+      .from('borrow_records')
+      .select('*, inventory(name, category)')
+      .in('status', ['PENDING', 'RETURN_REQUESTED']);
+
+    if (identity.userId && identity.rollNumber) {
+      query = query.or(`user_id.eq.${identity.userId},roll_number.eq.${identity.rollNumber}`);
+    } else if (identity.userId) {
+      query = query.eq('user_id', identity.userId);
+    } else if (identity.rollNumber) {
+      query = query.eq('roll_number', identity.rollNumber);
+    }
+
+    const { data: dbOwn } = await query;
+    if (dbOwn && dbOwn.length > 0) {
+      for (const rec of dbOwn) {
+        const alreadyIn = own.some(r => r.id === rec.id || r.borrowId === rec.id);
+        if (!alreadyIn) {
+          const isRet = rec.status === 'RETURN_REQUESTED';
+          own.push({
+            id: rec.id,
+            type: isRet ? 'RETURN' : 'ISSUE',
+            borrowId: isRet ? rec.id : undefined,
+            returnQuantity: isRet ? (rec.quantity || 1) : undefined,
+            itemId: rec.inventory_id,
+            itemName: rec.inventory?.name || 'Hardware Component',
+            category: rec.inventory?.category || 'Robotics',
+            borrowerName: rec.borrower_name || 'Member',
+            borrowerEmail: identity.email || (rec.roll_number ? `${rec.roll_number}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in'),
+            rollNumber: rec.roll_number,
+            userId: rec.user_id,
+            quantity: rec.quantity || 1,
+            purpose: rec.purpose || (isRet ? 'Return verification' : 'Issue request'),
+            durationDays: 7,
+            dueDate: rec.due_date ? rec.due_date.split('T')[0] : '',
+            status: 'PENDING',
+            requestedAt: rec.borrowed_at || new Date().toISOString()
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[HARDWARE REQUESTS] Error fetching member requests from Supabase:', err);
+  }
+
+  return own.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
 };
 
 export const getHardwareRequestById = (id: string): HardwareIssueRequest | undefined => {
@@ -350,6 +556,87 @@ export const approveHardwareRequest = async (
 
   // Idempotent: If already approved or processed, return success immediately
   if (req.status !== 'PENDING') {
+    return { success: true, request: req };
+  }
+
+  // Handle Return Approval
+  if (req.type === 'RETURN') {
+    const borrowId = req.borrowId || req.id;
+    const returnQty = req.returnQuantity || req.quantity || 1;
+
+    // Fetch borrow record
+    const { data: bRecord } = await dbRead
+      .from('borrow_records')
+      .select('*, inventory(name, available_quantity)')
+      .eq('id', borrowId)
+      .maybeSingle();
+
+    if (bRecord) {
+      // 1. Restock available quantity in inventory
+      const { data: currItem } = await dbRead
+        .from('inventory')
+        .select('available_quantity, name')
+        .eq('id', bRecord.inventory_id)
+        .maybeSingle();
+
+      const newAvail = (currItem?.available_quantity || 0) + returnQty;
+      await supabase
+        .from('inventory')
+        .update({ available_quantity: newAvail, updated_at: new Date().toISOString() })
+        .eq('id', bRecord.inventory_id);
+
+      // 2. If all units returned, mark record RETURNED; if partial, decrement remaining borrowed quantity
+      if (returnQty >= bRecord.quantity) {
+        await supabase
+          .from('borrow_records')
+          .update({ status: 'RETURNED', returned_at: new Date().toISOString() })
+          .eq('id', borrowId);
+      } else {
+        await supabase
+          .from('borrow_records')
+          .update({ quantity: bRecord.quantity - returnQty })
+          .eq('id', borrowId);
+      }
+
+      // Log audit
+      try {
+        const isUuid = (str?: string | null) => Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str));
+        await supabase.from('audit_logs').insert([
+          {
+            action: 'Approved Return',
+            user_id: isUuid(req.userId) ? req.userId : null,
+            item_id: isUuid(bRecord?.inventory_id) ? bRecord.inventory_id : null,
+            description: `Admin ${adminName || 'ADMIN'} approved return of ${returnQty} units of "${req.itemName}" from ${req.borrowerName}.`
+          }
+        ]);
+      } catch {}
+    }
+
+    req.status = 'APPROVED';
+    req.reviewedAt = new Date().toISOString();
+    req.reviewedBy = adminName || adminEmail || 'ADMIN';
+    saveState();
+    invalidateHardwareRequestsCache();
+
+    // Send Return Confirmation to student
+    if (req.borrowerEmail) {
+      sendReturnConfirmation(
+        req.borrowerEmail,
+        req.borrowerName,
+        req.itemName,
+        new Date()
+      ).catch((e) => console.error('[EMAIL ERROR] Return confirmation to student failed:', e));
+    }
+
+    // Send Admin Return Notification
+    sendAdminReturnNotification(SUPER_ADMIN_EMAILS, {
+      borrowerName: req.borrowerName,
+      borrowerEmail: req.borrowerEmail,
+      itemName: req.itemName,
+      quantity: returnQty,
+      returnedAt: new Date()
+    }).catch((e) => console.error('[EMAIL ERROR] Admin return notification failed:', e));
+
     return { success: true, request: req };
   }
 
@@ -446,14 +733,19 @@ export const rejectHardwareRequest = async (
   id: string,
   adminName: string,
   adminEmail: string,
-  reason?: string
+  reason?: string,
+  fallback?: any
 ): Promise<{ success: boolean; request?: HardwareIssueRequest; error?: string }> => {
   let req = requestsState[id];
   if (!req) {
     const { data: dbRec } = await dbRead.from('borrow_records').select('*, inventory(name, category)').eq('id', id).maybeSingle();
     if (dbRec) {
+      const isRet = dbRec.status === 'RETURN_REQUESTED';
       req = {
         id: dbRec.id,
+        type: isRet ? 'RETURN' : 'ISSUE',
+        borrowId: isRet ? dbRec.id : undefined,
+        returnQuantity: isRet ? (dbRec.quantity || 1) : undefined,
         itemId: dbRec.inventory_id,
         itemName: dbRec.inventory?.name || 'Hardware Component',
         category: dbRec.inventory?.category || 'Robotics',
@@ -462,7 +754,7 @@ export const rejectHardwareRequest = async (
         rollNumber: dbRec.roll_number,
         userId: dbRec.user_id,
         quantity: dbRec.quantity || 1,
-        purpose: dbRec.purpose || 'Testing',
+        purpose: dbRec.purpose || (isRet ? 'Return verification' : 'Testing'),
         durationDays: 7,
         dueDate: dbRec.due_date ? dbRec.due_date.split('T')[0] : '',
         status: dbRec.status,
@@ -472,9 +764,33 @@ export const rejectHardwareRequest = async (
     }
   }
 
+  // Fallback: If not found in server state, reconstruct from client request payload
+  if (!req && fallback && (fallback.itemId || fallback.inventory_id || fallback.borrowerEmail || fallback.borrowerName)) {
+    const isRet = fallback.type === 'RETURN' || Boolean(fallback.borrowId);
+    req = {
+      id,
+      type: isRet ? 'RETURN' : 'ISSUE',
+      borrowId: fallback.borrowId || (isRet ? id : undefined),
+      returnQuantity: Number(fallback.returnQuantity || fallback.quantity || 1),
+      itemId: fallback.itemId || fallback.inventory_id || '',
+      itemName: fallback.itemName || 'Hardware Component',
+      category: fallback.category || 'Robotics',
+      borrowerName: fallback.borrowerName || fallback.borrower_name || 'Member',
+      borrowerEmail: fallback.borrowerEmail || fallback.borrower_email || (fallback.rollNumber ? `${fallback.rollNumber}@mail.jiit.ac.in` : 'student@mail.jiit.ac.in'),
+      rollNumber: fallback.rollNumber || fallback.roll_number || null,
+      userId: fallback.userId || fallback.user_id,
+      quantity: Number(fallback.quantity || fallback.qty) || 1,
+      purpose: fallback.purpose || 'Testing',
+      durationDays: Number(fallback.durationDays || fallback.duration_days) || 7,
+      dueDate: fallback.dueDate || fallback.due_date || '',
+      status: 'PENDING',
+      requestedAt: fallback.requestedAt || new Date().toISOString()
+    };
+    requestsState[id] = req;
+  }
+
   if (!req) {
-    // If not found in server records, it was already cleared or was a local request.
-    // Return success immediately so the client can dismiss it cleanly on 1 click!
+    // If completely unknown, return clean rejection response
     invalidateHardwareRequestsCache();
     return {
       success: true,
@@ -501,11 +817,21 @@ export const rejectHardwareRequest = async (
     return { success: true, request: req };
   }
 
-  // If persisted in Supabase borrow_records, delete it
-  try {
-    await supabase.from('borrow_records').delete().eq('id', id);
-  } catch (e) {
-    // Non-blocking
+  // If this was a RETURN request, set status back to BORROWED in database
+  if (req.type === 'RETURN') {
+    try {
+      const borrowId = req.borrowId || req.id;
+      await supabase.from('borrow_records').update({ status: 'BORROWED' }).eq('id', borrowId);
+    } catch (e) {
+      console.warn('[REJECT RETURN] Failed to restore BORROWED status in Supabase:', e);
+    }
+  } else {
+    // If this was an ISSUE request persisted in borrow_records, delete the pending record
+    try {
+      await supabase.from('borrow_records').delete().eq('id', id);
+    } catch (e) {
+      // Non-blocking
+    }
   }
 
   req.status = 'REJECTED';
@@ -515,27 +841,28 @@ export const rejectHardwareRequest = async (
   saveState();
   invalidateHardwareRequestsCache();
 
-  // Send rejection email to user
+  // Send rejection email to user (always prioritized)
   if (req.borrowerEmail) {
     sendHardwareRequestStatusEmail(
       req.borrowerEmail,
       req.borrowerName,
       req.itemName,
-      req.quantity,
+      req.returnQuantity || req.quantity,
       'REJECTED',
       req.reviewedBy,
       req.reviewNote
     ).catch((e) => console.error('[EMAIL ERROR] Failed to send rejection email to requester:', e));
   }
 
-  // Log audit
+  // Log audit safely with UUID validation
   try {
+    const isUuid = (str?: string | null) => Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str));
     await supabase.from('audit_logs').insert([
       {
-        action: 'Rejected Request',
-        user_id: req.userId || null,
-        item_id: req.itemId,
-        description: `Admin ${adminName} rejected ${req.borrowerName}'s request for ${req.quantity}x ${req.itemName}.`
+        action: req.type === 'RETURN' ? 'Rejected Return' : 'Rejected Request',
+        user_id: isUuid(req.userId) ? req.userId : null,
+        item_id: isUuid(req.itemId) ? req.itemId : null,
+        description: `Admin ${adminName || 'ADMIN'} rejected ${req.borrowerName}'s ${req.type === 'RETURN' ? 'return' : 'issue request'} for ${req.returnQuantity || req.quantity}x ${req.itemName}. Reason: ${req.reviewNote}`
       }
     ]);
   } catch (e) {
