@@ -265,7 +265,8 @@ export const submitReturnRequestHandler = async (req: AuthRequest, res: Response
     });
 
     if (!result.success) {
-      return res.status(400).json({ status: 'error', message: result.message || 'Failed to submit return request.' });
+      const isForbidden = result.message?.includes('Access Denied');
+      return res.status(isForbidden ? 403 : 400).json({ status: 'error', message: result.message || 'Failed to submit return request.' });
     }
 
     return res.status(201).json({

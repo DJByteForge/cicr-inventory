@@ -1110,6 +1110,14 @@ class DashboardManager {
                 AdminManager.loadAuditLogs();
             }
 
+            // If switching to developers-view, render team showcase with Team as default
+            if (targetId === 'developers-view') {
+                if (typeof TeamShowcaseManager !== 'undefined') {
+                    TeamShowcaseManager.init();
+                    TeamShowcaseManager.setCategory('team');
+                }
+            }
+
             closeMobileSidebar();
         };
 
@@ -2046,18 +2054,9 @@ class ModalManager {
         }
 
         const myLoan = (item.borrowedBy || []).find(rec => !rec.returned && ModalManager.isUserLoanMatch(rec));
-        const hasActiveLoan = (item.borrowedBy || []).some(rec => !rec.returned);
 
-        if (role === 'ADMIN' && hasActiveLoan) {
-            returnBtn.style.display = 'inline-flex';
-            returnBtn.innerHTML = '<i data-lucide="corner-up-left"></i> Return Item';
-            returnBtn.onclick = () => {
-                const firstLoan = (item.borrowedBy || []).find(rec => !rec.returned);
-                if (firstLoan) {
-                    this.openReturnModal(firstLoan, item, item.borrowedBy.indexOf(firstLoan));
-                }
-            };
-        } else if (role !== 'ADMIN' && myLoan) {
+        // Only the user who actually borrowed this item sees the Return button
+        if (myLoan) {
             returnBtn.style.display = 'inline-flex';
             returnBtn.innerHTML = '<i data-lucide="corner-up-left"></i> Return Item';
             returnBtn.onclick = () => {
@@ -2107,26 +2106,32 @@ class ModalManager {
                 const isOverdue = Boolean(due && due < todayStr);
                 const dueBadge = due ? `<span class="borrower-due-badge ${isOverdue ? 'overdue' : ''}">${isOverdue ? 'OVERDUE: ' : 'Due: '}${due}</span>` : '';
 
+                const isMyRecord = ModalManager.isUserLoanMatch(rec);
+
                 const recEl = document.createElement('div');
                 recEl.className = 'borrower-record';
                 recEl.innerHTML = `
                     <div class="borrower-info-main">
-                        <span class="borrower-name">${rec.name} ${isMember ? '(Your Active Loan)' : ''}</span>
+                        <span class="borrower-name">${rec.name} ${isMyRecord ? '(Your Active Loan)' : ''}</span>
                         <span class="borrower-roll">${rec.roll} &bull; ${rec.purpose}</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${dueBadge}
                         <span class="borrower-qty-badge">${rec.qty} units</span>
-                        <button class="btn btn-secondary btn-inline-return" style="padding: 6px 10px; font-size: 11px;">
-                            <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
-                        </button>
+                        ${isMyRecord ? `
+                            <button class="btn btn-secondary btn-inline-return" style="padding: 6px 10px; font-size: 11px;">
+                                <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
+                            </button>
+                        ` : ''}
                     </div>
                 `;
                 
-                recEl.querySelector('.btn-inline-return')!.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.openReturnModal(rec, item, origIdx);
-                });
+                if (isMyRecord) {
+                    recEl.querySelector('.btn-inline-return')?.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.openReturnModal(rec, item, origIdx);
+                    });
+                }
                 
                 listContainer.appendChild(recEl);
             });
@@ -2447,6 +2452,7 @@ class ModalManager {
                     const el = document.createElement('div');
                     el.className = 'notif-card card-return card-overdue';
                     const dt = DashboardManager.formatLogDateTime(due);
+                    const isMyRecord = ModalManager.isUserLoanMatch(rec);
                     el.innerHTML = `
                         <div class="notif-card-header">
                             <div class="notif-card-tag tag-red">
@@ -2460,19 +2466,23 @@ class ModalManager {
                                 <strong>${rec.qty}x ${item.name}</strong> was borrowed by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'Student'}).
                             </p>
                             <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Lab Project'} &bull; Due date was ${due}. Immediate return required.</p>
+                            ${isMyRecord ? `
                             <div style="display:flex; justify-content:flex-end; margin-top:8px;">
                                 <button class="btn btn-secondary btn-drawer-return" style="padding: 4px 10px; font-size: 11px; display:inline-flex; align-items:center; gap:5px;">
                                     <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
                                 </button>
                             </div>
+                            ` : ''}
                         </div>
                     `;
-                    el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        ModalManager.close('logs-drawer');
-                        const origIdx = (item.borrowedBy || []).indexOf(rec);
-                        ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
-                    });
+                    if (isMyRecord) {
+                        el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            ModalManager.close('logs-drawer');
+                            const origIdx = (item.borrowedBy || []).indexOf(rec);
+                            ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
+                        });
+                    }
                     container.appendChild(el);
                 });
             }
@@ -2494,6 +2504,7 @@ class ModalManager {
                     const el = document.createElement('div');
                     el.className = 'notif-card card-loan';
                     const dt = DashboardManager.formatLogDateTime(due);
+                    const isMyRecord = ModalManager.isUserLoanMatch(rec);
                     el.innerHTML = `
                         <div class="notif-card-header">
                             <div class="notif-card-tag tag-cyan">
@@ -2507,19 +2518,23 @@ class ModalManager {
                                 <strong>${rec.qty}x ${item.name}</strong> &bull; Held by <span class="notif-user-pill">${rec.name}</span> (${rec.roll || 'ID'})
                             </p>
                             <p class="notif-card-sub-text">Purpose: ${rec.purpose || 'Robotics Work'}</p>
+                            ${isMyRecord ? `
                             <div style="display:flex; justify-content:flex-end; margin-top:8px;">
                                 <button class="btn btn-secondary btn-drawer-return" style="padding: 4px 10px; font-size: 11px; display:inline-flex; align-items:center; gap:5px;">
                                     <i data-lucide="corner-up-left" style="width:12px;height:12px;"></i> Return
                                 </button>
                             </div>
+                            ` : ''}
                         </div>
                     `;
-                    el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        ModalManager.close('logs-drawer');
-                        const origIdx = (item.borrowedBy || []).indexOf(rec);
-                        ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
-                    });
+                    if (isMyRecord) {
+                        el.querySelector('.btn-drawer-return')?.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            ModalManager.close('logs-drawer');
+                            const origIdx = (item.borrowedBy || []).indexOf(rec);
+                            ModalManager.openReturnModal(rec, item, origIdx >= 0 ? origIdx : 0);
+                        });
+                    }
                     container.appendChild(el);
                 });
             }
@@ -2988,15 +3003,20 @@ class ModalManager {
         }
     }
 
-    // Opens the return quantity selector. Members choose how many of their borrowed
-    // units to return (partial returns allowed); the request then awaits admin approval.
+    // Opens the return quantity selector. All users (both admins and members) choose
+    // how many borrowed units to return; all requests are sent to the Admin Portal for approval.
     public static openReturnModal(rec: BorrowRecord, item: InventoryItem, origIdx: number) {
         if (!rec || !rec.id) {
             ToastManager.show('Return Unavailable', 'This loan is not linked to a server record yet.', 'warning');
             return;
         }
 
-        const isAdmin = this.getCurrentRole() === 'ADMIN';
+        // Strict ownership enforcement: only the person who issued the loan can return it
+        if (!ModalManager.isUserLoanMatch(rec)) {
+            ToastManager.show('Return Prohibited', 'You can only initiate returns for components you have personally borrowed.', 'warning');
+            return;
+        }
+
         const borrowedQty = Math.max(1, Number(rec.qty) || 1);
 
         const nameEl = document.getElementById('return-modal-item-name');
@@ -3014,26 +3034,20 @@ class ModalManager {
         if (maxLabel) maxLabel.innerText = `of ${borrowedQty} borrowed`;
 
         const subtitle = document.getElementById('return-modal-subtitle');
-        if (subtitle) subtitle.innerText = isAdmin
-            ? 'Enter the number of units being returned to the lab'
-            : 'Choose how many borrowed units you wish to return';
+        if (subtitle) subtitle.innerText = 'Choose how many borrowed units you wish to return';
 
         const noteText = document.getElementById('return-modal-note-text');
-        if (noteText) noteText.innerText = isAdmin
-            ? 'Administrator direct return: inventory is restored immediately on confirmation.'
-            : 'Members submit return requests for Admin verification. Stock is checked back into inventory once approved by an administrator.';
+        if (noteText) noteText.innerText = 'Return requests are sent to the Admin Portal for verification. Stock is checked back into inventory once approved by an administrator.';
 
         const submitBtn = document.getElementById('btn-confirm-return-submit');
-        if (submitBtn) submitBtn.innerHTML = isAdmin
-            ? '<i data-lucide="check-circle-2"></i> Confirm Return'
-            : '<i data-lucide="check-circle-2"></i> Submit Return Request';
+        if (submitBtn) submitBtn.innerHTML = '<i data-lucide="check-circle-2"></i> Submit Return Request';
 
         this.open('return-qty-modal');
         lucide.createIcons();
     }
 
-    // Submits a full or partial return. Members hit /borrow/return-request (admin
-    // approval required); admins hit /borrow/return (immediate restock).
+    // Submits a full or partial return. Always hits /borrow/return-request so that
+    // requests (from both admins and members) go to the Admin Portal for verification.
     public static async handleReturnSubmission(borrowId: string, qtyVal: number, _idx: number) {
         if (!borrowId) {
             ToastManager.show('Return Error', 'Borrow reference is missing.', 'error');
@@ -3049,7 +3063,7 @@ class ModalManager {
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const endpoint = isAdmin ? `${API_BASE}/borrow/return` : `${API_BASE}/borrow/return-request`;
+            const endpoint = `${API_BASE}/borrow/return-request`;
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
@@ -3070,38 +3084,33 @@ class ModalManager {
 
             this.close('return-qty-modal');
 
-            if (isAdmin) {
-                ToastManager.show('Component Returned', payload.message || `Successfully returned ${requestedQty} unit(s) of ${itemName}.`, 'success');
-                DatabaseManager.addLog('return', `Admin returned <span>${requestedQty}x ${itemName}</span> to the vault.`);
-            } else {
-                ToastManager.show(
-                    'Return Request Submitted',
-                    `Return of ${requestedQty}x ${itemName} is awaiting Administrator approval before stock is restored.`,
-                    'success'
-                );
-                DatabaseManager.addLog('return', `<span>${itemName}</span> return request submitted for ${requestedQty} unit(s) — pending admin approval.`);
+            ToastManager.show(
+                'Return Request Submitted',
+                `Return of ${requestedQty}x ${itemName} is awaiting Administrator approval in the Admin Portal.`,
+                'success'
+            );
+            DatabaseManager.addLog('return', `<span>${itemName}</span> return request submitted for ${requestedQty} unit(s) — pending admin approval.`);
 
-                // Reflect the pending return immediately in the member's drawer.
-                const localUser = (() => {
-                    try { return JSON.parse(localStorage.getItem('cicr_user') || '{}'); } catch { return {}; }
-                })();
-                const localReq: RequestRecord = {
-                    id: payload?.data?.id || `req-ret-local-${Date.now()}`,
-                    type: 'RETURN',
-                    borrowId,
-                    returnQuantity: requestedQty,
-                    itemId: selectedItem?.id || '',
-                    itemName,
-                    name: localUser.name || localStorage.getItem('cicr_auth') || 'Member',
-                    roll: localUser.roll_number || localUser.roll || '',
-                    qty: requestedQty,
-                    purpose: `Return ${requestedQty} unit(s)`,
-                    status: 'PENDING',
-                    requestedAt: new Date().toISOString()
-                };
-                requests.unshift(localReq);
-                DatabaseManager.save();
-            }
+            // Reflect the pending return immediately in the local requests list.
+            const localUser = (() => {
+                try { return JSON.parse(localStorage.getItem('cicr_user') || '{}'); } catch { return {}; }
+            })();
+            const localReq: RequestRecord = {
+                id: payload?.data?.id || `req-ret-local-${Date.now()}`,
+                type: 'RETURN',
+                borrowId,
+                returnQuantity: requestedQty,
+                itemId: selectedItem?.id || '',
+                itemName,
+                name: localUser.name || localStorage.getItem('cicr_auth') || 'Member',
+                roll: localUser.roll_number || localUser.roll || '',
+                qty: requestedQty,
+                purpose: `Return ${requestedQty} unit(s)`,
+                status: 'PENDING',
+                requestedAt: new Date().toISOString()
+            };
+            requests.unshift(localReq);
+            DatabaseManager.save();
 
             await DatabaseManager.syncFromBackend();
 
@@ -5433,6 +5442,337 @@ declare global {
 }
 
 // ==========================================
+// Team Showcase Manager (GDG JIIT Style Interactive Showcase)
+// ==========================================
+interface TeamMember {
+    id: string;
+    name: string;
+    role: string;
+    greeting?: string;
+    avatar: string;
+    avatarPos: string;
+    accentColor: string;
+    firstNameColor?: string;
+    lastNameColor?: string;
+    socials: {
+        platform: 'linkedin' | 'github';
+        label: string;
+        url: string;
+    }[];
+}
+
+class TeamShowcaseManager {
+    private static activeCategory: 'mentors' | 'team' = 'team';
+    private static activeIndex: number = 0;
+    private static isInitialized: boolean = false;
+
+    private static readonly MENTORS: TeamMember[] = [
+        {
+            id: 'aryan',
+            name: 'Aryan Varshney',
+            role: 'Coordinator',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/aryan.png',
+            avatarPos: 'center 20%',
+            accentColor: '#00f0ff',
+            firstNameColor: '#ff3366',
+            lastNameColor: '#00f0ff',
+            socials: [
+                { platform: 'linkedin', label: 'Aryan Varshney', url: 'https://www.linkedin.com/in/aryan-varshney-392446310/' },
+                { platform: 'github', label: 'AryanV-Coder', url: 'https://github.com/AryanV-Coder' }
+            ]
+        },
+        {
+            id: 'gunjan',
+            name: 'Gunjan Pal',
+            role: 'Core Team',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/gunjan.jpg',
+            avatarPos: 'center 20%',
+            accentColor: '#bd00ff',
+            firstNameColor: '#bd00ff',
+            lastNameColor: '#ff007a',
+            socials: [
+                { platform: 'linkedin', label: 'Gunjan Pal', url: 'https://www.linkedin.com/in/gunjan-pal-796093284/' },
+                { platform: 'github', label: 'Gunjan00001', url: 'https://github.com/Gunjan00001' }
+            ]
+        },
+        {
+            id: 'dhruvi',
+            name: 'Dhruvi Gupta',
+            role: 'Management Head',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/dhruvi.png',
+            avatarPos: 'center 16%',
+            accentColor: '#ff007a',
+            firstNameColor: '#ff007a',
+            lastNameColor: '#00f0ff',
+            socials: [
+                { platform: 'linkedin', label: 'Dhruvi Gupta', url: 'https://www.linkedin.com/in/dhruvi-guptadg/' },
+                { platform: 'github', label: 'dhruvigup', url: 'https://github.com/dhruvigup' }
+            ]
+        }
+    ];
+
+    private static readonly TEAM: TeamMember[] = [
+        {
+            id: 'vardaan',
+            name: 'Vardaan Saxena',
+            role: 'Frontend + Integration',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/vardaan.jpg',
+            avatarPos: 'center 24%',
+            accentColor: '#00f0ff',
+            firstNameColor: '#ff3366',
+            lastNameColor: '#00f0ff',
+            socials: [
+                { platform: 'linkedin', label: 'Vardaan Saxena', url: 'https://www.linkedin.com/in/vardaan-saxena-b4b4a4365/' },
+                { platform: 'github', label: 'simplyvardaan', url: 'https://github.com/simplyvardaan/' }
+            ]
+        },
+        {
+            id: 'kushagra',
+            name: 'Kushagra Garg',
+            role: 'Backend',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/kushagra.png',
+            avatarPos: 'center 8%',
+            accentColor: '#00ff88',
+            firstNameColor: '#00ff88',
+            lastNameColor: '#00f0ff',
+            socials: [
+                { platform: 'linkedin', label: 'Kushagra Garg', url: 'https://www.linkedin.com/in/kushagra-garg-10bab5377/' },
+                { platform: 'github', label: 'Sun-fire-nikka', url: 'https://github.com/Sun-fire-nikka' }
+            ]
+        },
+        {
+            id: 'mahak',
+            name: 'Mahak Katahara',
+            role: 'Contributor',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/mahak.png',
+            avatarPos: 'center 18%',
+            accentColor: '#ff007a',
+            firstNameColor: '#ff007a',
+            lastNameColor: '#bd00ff',
+            socials: [
+                { platform: 'linkedin', label: 'Mahak Katahara', url: 'https://www.linkedin.com/in/mahak-katahara-947122389/' },
+                { platform: 'github', label: 'mahakkatahara', url: 'https://github.com/mahakkatahara' }
+            ]
+        },
+        {
+            id: 'divyam',
+            name: 'Divyam Jain',
+            role: 'Beta Tester',
+            greeting: 'Hi, my name is',
+            avatar: '/devs/divyam.png',
+            avatarPos: 'center 15%',
+            accentColor: '#ffb703',
+            firstNameColor: '#ffb703',
+            lastNameColor: '#00f0ff',
+            socials: [
+                { platform: 'linkedin', label: 'Divyam Jain', url: 'https://www.linkedin.com/in/divyamjain8108' },
+                { platform: 'github', label: 'DJByteForge', url: 'https://github.com/DJByteForge' }
+            ]
+        }
+    ];
+
+    public static init() {
+        this.bindEvents();
+        this.renderCategory(this.activeCategory);
+    }
+
+    private static getCurrentList(): TeamMember[] {
+        return this.activeCategory === 'mentors' ? this.MENTORS : this.TEAM;
+    }
+
+    public static setCategory(category: 'mentors' | 'team') {
+        this.activeCategory = category;
+        this.activeIndex = 0;
+        this.renderCategory(category);
+    }
+
+    public static selectMember(index: number) {
+        const list = this.getCurrentList();
+        if (index < 0) index = list.length - 1;
+        if (index >= list.length) index = 0;
+        this.activeIndex = index;
+        this.renderHeroCard(list[this.activeIndex]);
+        this.updateCarouselActiveState();
+    }
+
+    public static nextMember() {
+        this.selectMember(this.activeIndex + 1);
+    }
+
+    public static prevMember() {
+        this.selectMember(this.activeIndex - 1);
+    }
+
+    private static renderCategory(category: 'mentors' | 'team') {
+        // Update tab button active states
+        const tabMentors = document.getElementById('team-tab-mentors');
+        const tabTeam = document.getElementById('team-tab-team');
+        if (tabMentors) tabMentors.classList.toggle('active', category === 'mentors');
+        if (tabTeam) tabTeam.classList.toggle('active', category === 'team');
+
+        const list = this.getCurrentList();
+        if (this.activeIndex >= list.length) this.activeIndex = 0;
+
+        // Render carousel track avatars
+        const track = document.getElementById('team-carousel-track');
+        if (track) {
+            track.innerHTML = list.map((m, idx) => `
+                <button type="button" class="team-avatar-selector ${idx === this.activeIndex ? 'active' : ''}" data-index="${idx}" aria-label="View profile of ${m.name}">
+                    <div class="selector-avatar-circle" style="--accent: ${m.accentColor};">
+                        <img src="${m.avatar}" alt="${m.name}" class="selector-avatar-img" style="object-position: ${m.avatarPos};" loading="lazy">
+                    </div>
+                    <span class="selector-avatar-name">${m.name.split(' ')[0]}</span>
+                </button>
+            `).join('');
+
+            // Add click listeners to avatar items
+            track.querySelectorAll('.team-avatar-selector').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.getAttribute('data-index') || '0', 10);
+                    this.selectMember(idx);
+                });
+            });
+        }
+
+        // Render Hero Card for current active member
+        this.renderHeroCard(list[this.activeIndex]);
+    }
+
+    private static renderHeroCard(m: TeamMember) {
+        const card = document.getElementById('team-hero-card');
+        const avatarImg = document.getElementById('hero-avatar-img') as HTMLImageElement;
+        const rolePill = document.getElementById('hero-role-pill');
+        const displayName = document.getElementById('hero-display-name');
+        const socialLinks = document.getElementById('hero-social-links');
+        const ambientGlow = document.getElementById('hero-ambient-glow');
+        const glowRing = document.getElementById('hero-avatar-glow-ring');
+
+        if (!m) return;
+
+        // Split name for GDG JIIT style dual-color headline
+        const nameParts = m.name.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Trigger subtle animation
+        if (card) {
+            card.classList.remove('hero-fade-active');
+            void card.offsetWidth; // Force reflow
+            card.classList.add('hero-fade-active');
+            card.style.setProperty('--card-accent', m.accentColor);
+        }
+
+        if (avatarImg) {
+            avatarImg.src = m.avatar;
+            avatarImg.alt = m.name;
+            avatarImg.style.objectPosition = m.avatarPos;
+        }
+
+        if (rolePill) {
+            rolePill.textContent = m.role;
+            rolePill.style.color = m.accentColor;
+            rolePill.style.borderColor = `${m.accentColor}66`;
+            rolePill.style.boxShadow = `0 0 14px ${m.accentColor}33`;
+        }
+
+        if (displayName) {
+            displayName.innerHTML = `
+                <span class="hero-first-name" style="background: linear-gradient(135deg, ${m.firstNameColor || '#ff4d4d'}, ${m.accentColor}); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${firstName}</span>
+                <span class="hero-last-name" style="background: linear-gradient(135deg, #ffffff 20%, ${m.lastNameColor || m.accentColor}); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${lastName}</span>
+            `;
+        }
+
+        if (ambientGlow) {
+            ambientGlow.style.background = m.accentColor;
+        }
+
+        if (glowRing) {
+            glowRing.style.background = `conic-gradient(from 180deg, ${m.accentColor}, #bd00ff, #ff007a, ${m.accentColor})`;
+            glowRing.style.boxShadow = `0 0 38px ${m.accentColor}66, 0 0 16px rgba(189, 0, 255, 0.3)`;
+        }
+
+        const getSocialIconSvg = (platform: 'linkedin' | 'github') => {
+            if (platform === 'github') {
+                return `<svg class="social-icon-svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>`;
+            }
+            if (platform === 'linkedin') {
+                return `<svg class="social-icon-svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>`;
+            }
+            return '';
+        };
+
+        if (socialLinks) {
+            socialLinks.innerHTML = m.socials.map(s => `
+                <a href="${s.url}" target="_blank" rel="noopener noreferrer" class="hero-social-pill" title="${m.name} on ${s.platform === 'github' ? 'GitHub' : 'LinkedIn'}">
+                    ${getSocialIconSvg(s.platform)}
+                    <span>${s.label}</span>
+                </a>
+            `).join('');
+        }
+
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
+    }
+
+    private static updateCarouselActiveState() {
+        const track = document.getElementById('team-carousel-track');
+        if (!track) return;
+
+        const items = track.querySelectorAll('.team-avatar-selector');
+        items.forEach((item, idx) => {
+            const isActive = idx === this.activeIndex;
+            item.classList.toggle('active', isActive);
+        });
+    }
+
+    private static bindEvents() {
+        if (this.isInitialized) return;
+        this.isInitialized = true;
+
+        const tabMentors = document.getElementById('team-tab-mentors');
+        const tabTeam = document.getElementById('team-tab-team');
+        const btnPrev = document.getElementById('team-carousel-prev');
+        const btnNext = document.getElementById('team-carousel-next');
+
+        if (tabMentors) {
+            tabMentors.addEventListener('click', () => this.setCategory('mentors'));
+        }
+
+        if (tabTeam) {
+            tabTeam.addEventListener('click', () => this.setCategory('team'));
+        }
+
+        if (btnPrev) {
+            btnPrev.addEventListener('click', () => this.prevMember());
+        }
+
+        if (btnNext) {
+            btnNext.addEventListener('click', () => this.nextMember());
+        }
+
+        // Keyboard navigation support when viewing developers section
+        document.addEventListener('keydown', (e) => {
+            const devSection = document.getElementById('developers-view');
+            if (!devSection || devSection.style.display === 'none') return;
+            if (e.key === 'ArrowLeft') {
+                this.prevMember();
+            } else if (e.key === 'ArrowRight') {
+                this.nextMember();
+            }
+        });
+    }
+}
+
+(window as any).TeamShowcaseManager = TeamShowcaseManager;
+
+// ==========================================
 // Theme Manager System
 // ==========================================
 class ThemeManager {
@@ -5555,6 +5895,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DatabaseManager.init();
     ModalManager.init();
     PasswordResetManager.init();
+    TeamShowcaseManager.init();
 
     AuthManager.init();
     AdminManager.init();
@@ -5571,9 +5912,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.documentElement.style.setProperty('--mouse-y', `${y}%`);
     });
 
-    // Custom 3D tilt interaction logic matching Pinterest OVI interface
-    const apply3DTilt = (el: HTMLElement, maxRotation: number = 10) => {
+    // Custom 3D tilt interaction logic for desktop interactivity
+    const apply3DTilt = (el: HTMLElement, maxRotation: number = 6) => {
         el.addEventListener('mousemove', (e) => {
+            if (window.innerWidth < 768) return; // Only apply on desktop
             const rect = el.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
@@ -5582,31 +5924,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const rotateX = ((y - centerY) / centerY) * -maxRotation;
             const rotateY = ((x - centerX) / centerX) * maxRotation;
             
-            el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
-            el.style.transition = 'none';
+            el.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.01, 1.01, 1.01)`;
+            el.style.transition = 'transform 0.1s ease-out';
         });
         
         el.addEventListener('mouseleave', () => {
-            el.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+            el.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
             el.style.transition = 'transform 0.5s ease';
         });
     };
 
-    const welcomeTextContainer = document.querySelector('.welcome-huge-text') as HTMLElement;
-    if (welcomeTextContainer) apply3DTilt(welcomeTextContainer, 15);
-
-    // Setup navbar logo click event to slide the welcome screen down
-    const navLogo = document.getElementById('nav-brand-logo');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    if (navLogo && welcomeScreen) {
-        navLogo.addEventListener('click', () => {
-            welcomeScreen.style.display = 'flex';
-            // Force reflow/redraw
-            welcomeScreen.offsetHeight;
-            welcomeScreen.style.transform = 'translateY(0)';
-            welcomeScreen.style.transition = 'transform 0.8s cubic-bezier(0.85, 0, 0.15, 1)';
-        });
+    const heroCard = document.getElementById('team-hero-card');
+    if (heroCard) {
+        apply3DTilt(heroCard, 5);
     }
+
+
 
 
 

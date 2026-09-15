@@ -14,7 +14,6 @@ import {
   SUPER_ADMIN_EMAILS
 } from '../../services/emailService';
 import { dbRead, dbWrite, supabase } from '../../config/database';
-import { finalizeBorrow } from './borrow.controller';
 
 export interface HardwareIssueRequest {
   id: string;
@@ -214,6 +213,45 @@ export const createReturnRequest = async (payload: {
 
   if (record.status === 'RETURNED') {
     return { success: false, message: 'This item has already been marked as returned.' };
+  }
+
+  // Enforce strict ownership: only the user who issued/borrowed this item can return it!
+  const isOwner = (() => {
+    // 1. Match by user_id
+    if (payload.userId && record.user_id && payload.userId === record.user_id) {
+      return true;
+    }
+    // 2. Match by student roll number
+    const normUserRoll = (payload.userRoll || '').trim().toLowerCase();
+    const normRecRoll = (record.roll_number || '').trim().toLowerCase();
+    if (normUserRoll && normRecRoll && normUserRoll === normRecRoll) {
+      return true;
+    }
+    // 3. Match by student email containing roll number
+    const normUserEmail = (payload.userEmail || '').trim().toLowerCase();
+    if (normUserEmail && normRecRoll && (normUserEmail.startsWith(`${normRecRoll}@`) || normUserEmail === `${normRecRoll}@mail.jiit.ac.in`)) {
+      return true;
+    }
+    // 4. Match by exact email if available on record
+    const recEmail = (record.borrower_email || record.email || '').trim().toLowerCase();
+    if (normUserEmail && recEmail && normUserEmail === recEmail) {
+      return true;
+    }
+    // 5. Match by exact full name (guarding against generic placeholders)
+    const normUserName = (payload.userName || '').trim().toLowerCase();
+    const normRecName = (record.borrower_name || '').trim().toLowerCase();
+    const isGeneric = (n: string) => !n || ['member', 'student', 'user', 'admin', 'borrower', 'guest'].includes(n) || n.length < 3;
+    if (!isGeneric(normUserName) && !isGeneric(normRecName) && normUserName === normRecName) {
+      return true;
+    }
+    return false;
+  })();
+
+  if (!isOwner) {
+    return {
+      success: false,
+      message: 'Access Denied: You can only return items that you personally borrowed.'
+    };
   }
 
   const numToReturn = Math.max(1, Math.min(Number(returnQuantity) || 1, record.quantity));
@@ -615,6 +653,11 @@ export const approveHardwareRequest = async (
     req.status = 'APPROVED';
     req.reviewedAt = new Date().toISOString();
     req.reviewedBy = adminName || adminEmail || 'ADMIN';
+    if (req.borrowId && requestsState[req.borrowId]) {
+      requestsState[req.borrowId].status = 'APPROVED';
+      requestsState[req.borrowId].reviewedAt = req.reviewedAt;
+      requestsState[req.borrowId].reviewedBy = req.reviewedBy;
+    }
     saveState();
     invalidateHardwareRequestsCache();
 
@@ -641,6 +684,7 @@ export const approveHardwareRequest = async (
   }
 
   // Finalize borrow in database / inventory
+  const { finalizeBorrow } = await import('./borrow.controller');
   const result = await finalizeBorrow({
     userId: req.userId || '',
     userName: req.borrowerName,
@@ -838,6 +882,12 @@ export const rejectHardwareRequest = async (
   req.reviewedAt = new Date().toISOString();
   req.reviewedBy = adminName || adminEmail || 'ADMIN';
   req.reviewNote = reason || 'Declined by administrator.';
+  if (req.borrowId && requestsState[req.borrowId]) {
+    requestsState[req.borrowId].status = 'REJECTED';
+    requestsState[req.borrowId].reviewedAt = req.reviewedAt;
+    requestsState[req.borrowId].reviewedBy = req.reviewedBy;
+    requestsState[req.borrowId].reviewNote = req.reviewNote;
+  }
   saveState();
   invalidateHardwareRequestsCache();
 

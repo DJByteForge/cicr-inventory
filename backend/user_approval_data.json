@@ -148,16 +148,6 @@
       "name": "Tushar Goyal",
       "roll_number": "992501210081"
     },
-    "992501210030@mail.jiit.ac.in": {
-      "status": "APPROVED",
-      "role": "MEMBER",
-      "approvedAt": "2026-09-13T20:34:48.313+00:00",
-      "approvedBy": "ADMIN",
-      "username": "ashutoshsingh",
-      "batch": "E1 ECM",
-      "name": "Ashutosh Singh",
-      "roll_number": "992501210030"
-    },
     "992510170013@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
@@ -261,6 +251,78 @@
       "username": "Test",
       "batch": "N/A"
     },
+    "admin.1789473647189@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789473647189@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789475636658@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789475636658@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789475852026@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789475852026@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789475913652@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789475913652@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789475969290@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789475969290@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "admin.1789481126548@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
+    "member.1789481126548@cicr.test": {
+      "status": "PENDING",
+      "role": "MEMBER",
+      "username": "Test",
+      "batch": "N/A"
+    },
     "992501030406@mail.jiit.ac.in": {
       "status": "APPROVED",
       "role": "MEMBER",
@@ -268,5 +330,7 @@
       "approvedBy": "ADMIN"
     }
   },
-  "purgedEmails": []
+  "purgedEmails": [
+    "992501210030@mail.jiit.ac.in"
+  ]
 }
