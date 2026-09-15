@@ -7,13 +7,25 @@
 //    Every Redis call is wrapped so a transient connection failure degrades
 //    to the in-memory store instead of crashing a request.
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import Redis from 'ioredis';
 
 // Load env before reading process.env (module may be imported without a caller
 // having run dotenv.config() first).
 dotenv.config();
 
-export const REDIS_URL = process.env.REDIS_URL || '';
+const normalizeRedisUrl = (raw: string | undefined): string => {
+  const value = (raw || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!value) return '';
+  const normalized = value.replace(/^UPSTASH_REDIS_REST_URL\s*=\s*/i, '').replace(/^REDIS_URL\s*=\s*/i, '');
+  if (!normalized) return '';
+  if (/^redis(?:s)?:\/\//i.test(normalized) || /^\w+\s*:\d+$/i.test(normalized)) {
+    return normalized;
+  }
+  return '';
+};
+
+export const REDIS_URL = normalizeRedisUrl(process.env.REDIS_URL);
 export const isRedisEnabled = REDIS_URL.length > 0;
 
 // ---------------------------------------------------------------- in-memory
@@ -171,3 +183,45 @@ export const closeRedis = async (): Promise<void> => {
     }
   }
 };
+
+// ------------------------------------------------------------ distributed lock
+// Minimal Redis-based lock used for cross-instance coordination
+// (replication leadership + recovery deduplication).
+//
+// Safety:
+//   - acquired with SET NX PX (TTL) so a crashed holder's lock expires.
+//   - released only if the caller still owns it (compare-and-delete).
+//   - when Redis is unavailable, acquisition FAILS (returns acquired:false);
+//     callers must treat that as "do not proceed" so multiple instances never
+//     run the same critical section simultaneously.
+export interface LockHandle {
+  acquired: boolean;
+  token: string;
+  reason?: string;
+}
+
+const RELEASE_LUA =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
+
+export const acquireLock = async (key: string, ttlMs: number): Promise<LockHandle> => {
+  const token = crypto.randomUUID();
+  if (!redisClient) return { acquired: false, token, reason: 'redis-unavailable' };
+  try {
+    const res = await redisClient.set(key, token, 'PX', Math.max(1000, ttlMs), 'NX');
+    return { acquired: res === 'OK', token };
+  } catch (err: any) {
+    console.warn('[REDIS] acquireLock failed:', err?.message);
+    return { acquired: false, token, reason: 'redis-error' };
+  }
+};
+
+export const releaseLock = async (key: string, token: string): Promise<void> => {
+  if (!redisClient) return;
+  try {
+    await redisClient.eval(RELEASE_LUA, 1, key, token);
+  } catch (err: any) {
+    console.warn('[REDIS] releaseLock failed:', err?.message);
+  }
+};
+
+export const isRedisAvailable = (): boolean => redisClient !== null;

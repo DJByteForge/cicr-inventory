@@ -12,7 +12,7 @@ import {
   rejectHardwareRequestHandler,
   submitReturnRequestHandler
 } from './borrow.controller';
-import { authenticateToken } from '../../middleware/auth.middleware';
+import { authenticateToken, requireAdmin } from '../../middleware/auth.middleware';
 
 const router = Router();
 
@@ -20,8 +20,8 @@ router.get('/admins', getAdmins);
 router.post('/', authenticateToken, borrowItem);
 router.post('/request', authenticateToken, createHardwareRequestHandler);
 router.get('/requests', authenticateToken, getHardwareRequestsHandler);
-router.post('/requests/:id/approve', authenticateToken, approveHardwareRequestHandler);
-router.post('/requests/:id/reject', authenticateToken, rejectHardwareRequestHandler);
+router.post('/requests/:id/approve', authenticateToken, requireAdmin, approveHardwareRequestHandler);
+router.post('/requests/:id/reject', authenticateToken, requireAdmin, rejectHardwareRequestHandler);
 router.post('/request-otp', authenticateToken, requestOtp);
 router.post('/verify-otp', authenticateToken, verifyOtp);
 router.post('/return', authenticateToken, returnItem);

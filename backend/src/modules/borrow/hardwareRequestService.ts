@@ -364,7 +364,7 @@ export const getAllHardwareRequests = async (force = false): Promise<HardwareIss
           const match = ev.description.match(/^(.*?)\s*\((.*?)\)\s*requested\s*(\d+)x\s*"([^"]+)"\s*for\s*purpose:\s*(.*)$/i);
           if (match) {
             const [, borrowerName, borrowerEmail, qtyStr, itemName, purpose] = match;
-            const isResolved = auditEvents.some(other => {
+            const isResolved = auditEvents.some((other: any) => {
               const otherTime = other.timestamp || '';
               return (other.action === 'Hardware Approved' || other.action === 'Hardware Rejected') &&
                 new Date(otherTime).getTime() >= new Date(evTime).getTime() &&

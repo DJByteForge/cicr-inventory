@@ -1,6 +1,7 @@
 // Auth OTP controller (v1.7.0).
 //
-// Handles OTP-based login + signup flow (Decommissioned in favor of direct credential auth).
+// OTP-based login was permanently decommissioned in favor of direct credential login.
+// This file remains as a compatibility stub to prevent broken routes.
 
 import { Request, Response } from 'express';
 

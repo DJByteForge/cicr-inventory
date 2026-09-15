@@ -1,21 +1,37 @@
 import { Request, Response } from 'express';
 import { dbRead } from '../../config/database';
+import { cacheGetJSON, cacheSetJSON } from '../../config/redis';
 
-// GET /api/stats (Dashboard Analytics)
+const STATS_CACHE_KEY = 'cicr:cache:stats';
+const STATS_CACHE_TTL = 15; // seconds
+
+// GET /api/stats (Dashboard Analytics) — independent read-pool queries in parallel, cached 15s
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
-    const { count: totalItems } = await dbRead.from('inventory').select('*', { count: 'exact', head: true });
-    const { count: totalUsers } = await dbRead.from('users').select('*', { count: 'exact', head: true });
-    const { count: activeBorrows } = await dbRead
-      .from('borrow_records')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'BORROWED');
+    const cached = await cacheGetJSON<any>(STATS_CACHE_KEY);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
 
-    const { data: items } = await dbRead.from('inventory').select('quantity, available_quantity');
-    const totalQuantity = items?.reduce((acc, curr) => acc + curr.quantity, 0) || 0;
-    const availableQuantity = items?.reduce((acc, curr) => acc + curr.available_quantity, 0) || 0;
+    const [
+      { count: totalItems },
+      { count: totalUsers },
+      { count: activeBorrows },
+      { data: items }
+    ] = await Promise.all([
+      dbRead.from('inventory').select('*', { count: 'exact', head: true }),
+      dbRead.from('users').select('*', { count: 'exact', head: true }),
+      dbRead
+        .from('borrow_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'BORROWED'),
+      dbRead.from('inventory').select('quantity, available_quantity')
+    ]);
 
-    return res.status(200).json({
+    const totalQuantity = items?.reduce((acc: number, curr: any) => acc + curr.quantity, 0) || 0;
+    const availableQuantity = items?.reduce((acc: number, curr: any) => acc + curr.available_quantity, 0) || 0;
+
+    const payload = {
       status: 'success',
       data: {
         total_items: totalItems || 0,
@@ -25,7 +41,10 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         available_quantity: availableQuantity,
         borrowed_quantity: totalQuantity - availableQuantity
       }
-    });
+    };
+
+    await cacheSetJSON(STATS_CACHE_KEY, payload, STATS_CACHE_TTL);
+    return res.status(200).json(payload);
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
