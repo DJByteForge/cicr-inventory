@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabase, dbWrite, dbRead } from '../../config/database';
+import { dbWrite, dbRead } from '../../config/database';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import {
   sendBorrowConfirmation,
@@ -70,7 +70,7 @@ export const finalizeBorrow = async (
 
   // 2. Atomic decrement: only succeed if sufficient stock exists.
   //    This WHERE clause prevents concurrent borrows from over-allocating.
-  const { data: updatedRows, error: updateErr } = await supabase
+  const { data: updatedRows, error: updateErr } = await dbWrite
     .from('inventory')
     .update({
       available_quantity: item.available_quantity - quantity,
@@ -109,7 +109,7 @@ export const finalizeBorrow = async (
   const isUUID = (str?: string) => Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
   const safeUserId = isUUID(userId) ? userId : null;
 
-  const { data: borrowRecord, error: borrowErr } = await supabase
+  const { data: borrowRecord, error: borrowErr } = await dbWrite
     .from('borrow_records')
     .insert([
       {
@@ -336,7 +336,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
 
     if (isFullReturn) {
       // Full return: mark status as RETURNED
-      const { data: updated, error: updateRecordErr } = await supabase
+      const { data: updated, error: updateRecordErr } = await dbWrite
         .from('borrow_records')
         .update({
           status: 'RETURNED',
@@ -351,7 +351,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
       updatedRecord = updated;
     } else {
       // Partial return: decrement active borrowed quantity
-      const { data: updated, error: updateRecordErr } = await supabase
+      const { data: updated, error: updateRecordErr } = await dbWrite
         .from('borrow_records')
         .update({
           quantity: record.quantity - qtyToReturn
@@ -377,7 +377,7 @@ export const returnItem = async (req: AuthRequest, res: Response) => {
       .single();
     const restoredQty = (currentItem?.available_quantity || 0) + qtyToReturn;
 
-    const { error: restoreErr } = await supabase
+    const { error: restoreErr } = await dbWrite
       .from('inventory')
       .update({ available_quantity: restoredQty, updated_at: new Date().toISOString() })
       .eq('id', record.inventory_id);
@@ -457,8 +457,8 @@ export const getBorrowHistory = async (req: AuthRequest, res: Response) => {
     if (error) throw error;
 
     // Resolve related users and items manually
-    const userIds = [...new Set((records || []).map((r) => r.user_id).filter(Boolean))];
-    const itemIds = [...new Set((records || []).map((r) => r.inventory_id).filter(Boolean))];
+    const userIds = [...new Set((records || []).map((r: any) => r.user_id).filter(Boolean))];
+    const itemIds = [...new Set((records || []).map((r: any) => r.inventory_id).filter(Boolean))];
 
     const [usersRes, itemsRes] = await Promise.all([
       userIds.length
@@ -469,10 +469,10 @@ export const getBorrowHistory = async (req: AuthRequest, res: Response) => {
         : Promise.resolve({ data: [] })
     ]);
 
-    const userMap = Object.fromEntries((usersRes.data || []).map((u) => [u.id, u]));
-    const itemMap = Object.fromEntries((itemsRes.data || []).map((i) => [i.id, i]));
+    const userMap = Object.fromEntries((usersRes.data || []).map((u: any) => [u.id, u]));
+    const itemMap = Object.fromEntries((itemsRes.data || []).map((i: any) => [i.id, i]));
 
-    const history = (records || []).map((r) => ({
+    const history = (records || []).map((r: any) => ({
       ...r,
       users: userMap[r.user_id] || null,
       inventory: itemMap[r.inventory_id] || null

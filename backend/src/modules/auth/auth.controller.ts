@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { dbWrite, dbRead, supabase } from '../../config/database';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest, AuthUser } from '../../middleware/auth.middleware';
 import { isValidEmail } from '../../validators/email.validator';
 import {
   MASTER_ADMIN_EMAIL,
@@ -33,6 +33,15 @@ import {
 } from '../../services/emailService';
 import { generateAuthOtp, storeAuthOtp, verifyAuthOtp, consumeAuthOtp } from './authOtpService';
 import { logAuditEvent } from '../../services/auditService';
+
+// users-table row shape for reads in this controller. Queries select different
+// column subsets, so this reuses the existing AuthUser type with everything
+// optional except the id/email fields every callback below relies on.
+interface AuthUserRow extends Partial<AuthUser> {
+  id: string;
+  email: string;
+  created_at?: string;
+}
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -70,14 +79,14 @@ export const register = async (req: Request, res: Response) => {
       .limit(2);
 
     if (existingMatches && existingMatches.length > 0) {
-      const emailMatch = existingMatches.find((u) => u.email?.toLowerCase() === normEmail);
+      const emailMatch = existingMatches.find((u: AuthUserRow) => u.email?.toLowerCase() === normEmail);
       if (emailMatch && !isPurgedUser(normEmail)) {
         return res.status(400).json({
           status: 'error',
           message: 'An account with this college email is already registered. If your request is pending, please wait for admin approval or try logging in.'
         });
       }
-      const rollMatch = existingMatches.find((u) => userRoll && u.roll_number === userRoll);
+      const rollMatch = existingMatches.find((u: AuthUserRow) => userRoll && u.roll_number === userRoll);
       if (rollMatch && !isPurgedUser(rollMatch.email)) {
         return res.status(400).json({
           status: 'error',
@@ -98,7 +107,7 @@ export const register = async (req: Request, res: Response) => {
     unpurgeEmail(normEmail);
 
     let newUser: any = null;
-    const existingPurged = existingMatches?.find((u) => u.email?.toLowerCase() === normEmail);
+    const existingPurged = existingMatches?.find((u: AuthUserRow) => u.email?.toLowerCase() === normEmail);
 
     if (existingPurged) {
       const { data: updatedUser, error: updateError } = await supabase
@@ -426,8 +435,8 @@ export const listUsersForAdmin = async (req: AuthRequest, res: Response) => {
     const allApprovals = getAllUserApprovals();
 
     const userList = (users || [])
-      .filter((u) => !u.email.endsWith('.test'))
-      .map((u) => {
+      .filter((u: AuthUserRow) => !u.email.endsWith('.test'))
+      .map((u: AuthUserRow) => {
         const normEmail = u.email.toLowerCase();
         const isMaster = isSuperAdminEmail(normEmail) || isDesignatedAdmin(normEmail, u.name) || u.role === 'ADMIN';
         const approval = allApprovals[normEmail] || getUserApproval(normEmail, u.role || 'MEMBER');
@@ -889,4 +898,4 @@ export const adminCreateUser = async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
-};
+};

@@ -299,7 +299,7 @@ export const getAllAdminEmails = async (): Promise<string[]> => {
   try {
     const { data: dbAdmins } = await dbRead.from('users').select('email').eq('role', 'ADMIN');
     if (dbAdmins) {
-      dbAdmins.forEach((u) => {
+      dbAdmins.forEach((u: any) => {
         if (u.email && !u.email.endsWith('.test')) {
           adminSet.add(u.email.toLowerCase());
         }

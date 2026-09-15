@@ -9,6 +9,7 @@ import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import nodemailer from 'nodemailer';
 import { REDIS_URL, isRedisEnabled } from './redis';
+import { getSmtpUser, getSmtpPass } from '../services/emailService';
 
 export interface EmailJobData {
   kind: string;
@@ -36,24 +37,34 @@ if (isRedisEnabled && REDIS_URL) {
 
   emailQueue = new Queue<EmailJobData>(QUEUE_NAME, { connection: queueConnection });
 
-  const workerTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    pool: true,
-    maxConnections: 3,
-    maxMessages: 100,
-    auth: {
-      user: process.env.SMTP_USER || 'cicrinventory@gmail.com',
-      pass: (process.env.SMTP_PASS || '').replace(/\s+/g, '')
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 8000,
-    socketTimeout: 15000,
-    tls: {
-      rejectUnauthorized: false
+  // Lazily created on first job: emailService imports enqueueEmail from this
+  // module, so resolving SMTP credentials at module top-level would read a
+  // partially-initialized circular import (getSmtpUser is not a function yet).
+  // Deferring to job time also picks up late-arriving env configuration.
+  let workerTransporter: nodemailer.Transporter | null = null;
+  const getWorkerTransporter = (): nodemailer.Transporter => {
+    if (!workerTransporter) {
+      workerTransporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: Number(process.env.SMTP_PORT) === 465,
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 100,
+        auth: {
+          user: getSmtpUser(),
+          pass: getSmtpPass()
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 15000,
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
     }
-  });
+    return workerTransporter;
+  };
 
   const worker = new Worker<EmailJobData>(
     QUEUE_NAME,
@@ -63,7 +74,7 @@ if (isRedisEnabled && REDIS_URL) {
         console.log(`[EMAIL QUEUE] Dispatches suppressed per configuration. Skipping job ${job.id}.`);
         return;
       }
-      const info = await workerTransporter.sendMail(mailOptions as nodemailer.SendMailOptions);
+      const info = await getWorkerTransporter().sendMail(mailOptions as nodemailer.SendMailOptions);
       console.log(
         `[EMAIL QUEUE] ${kind} sent (job ${job.id}) | messageId=${info.messageId} | accepted=${JSON.stringify(info.accepted || [])}`
       );
